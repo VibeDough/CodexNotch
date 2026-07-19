@@ -69,8 +69,12 @@ final class NotchModel: ObservableObject {
         if hovered && Date() < hoverSuppressedUntil { return }
         if !hovered && isDropTargeted { return }
         if isHovered == hovered {
-            pendingHoverValue = nil
-            hoverTask?.cancel()
+            // Cancel only a pending transition in the opposite direction.
+            // Once the panel has grown, keep the short content-reveal phase alive.
+            if pendingHoverValue != nil {
+                pendingHoverValue = nil
+                hoverTask?.cancel()
+            }
             return
         }
         guard pendingHoverValue != hovered else { return }
