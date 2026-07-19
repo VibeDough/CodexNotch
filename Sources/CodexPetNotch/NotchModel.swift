@@ -449,6 +449,9 @@ final class NotchModel: ObservableObject {
            let petStackUpdatedAt = snapshot.petStackUpdatedAt {
             reconcilePetCompletionStack(count: petStackItemCount, updatedAt: petStackUpdatedAt)
         }
+        if let viewedThread = snapshot.viewedThread {
+            acknowledgeViewedCompletion(viewedThread)
+        }
         if taskLayoutChanged {
             NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
         }
@@ -529,6 +532,17 @@ final class NotchModel: ObservableObject {
         let removedKeys = Set(removed.map(\.key))
         acknowledgedCompletionKeys.formUnion(removedKeys)
         pendingCompletions.removeAll { removedKeys.contains($0.key) }
+        showNextCompletion()
+    }
+
+    private func acknowledgeViewedCompletion(_ viewedThread: CodexViewedThread) {
+        let viewed = pendingCompletions.filter {
+            $0.task.id == viewedThread.id && $0.eventDate <= viewedThread.viewedAt
+        }
+        guard !viewed.isEmpty else { return }
+        let viewedKeys = Set(viewed.map(\.key))
+        acknowledgedCompletionKeys.formUnion(viewedKeys)
+        pendingCompletions.removeAll { viewedKeys.contains($0.key) }
         showNextCompletion()
     }
 

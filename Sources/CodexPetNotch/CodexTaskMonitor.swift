@@ -15,8 +15,14 @@ struct CodexStatusSnapshot {
     let todayTokens: Int
     let usageLimit: CodexUsageLimit?
     let completedTask: CodexTaskItem?
+    let viewedThread: CodexViewedThread?
     let petStackItemCount: Int?
     let petStackUpdatedAt: Date?
+}
+
+struct CodexViewedThread {
+    let id: String
+    let viewedAt: Date
 }
 
 struct CodexUsageLimit: Equatable {
@@ -67,6 +73,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
     private var desktopLogOffset: UInt64 = 0
     private var cachedPetStackItemCount: Int?
     private var cachedPetStackUpdatedAt: Date?
+    private var cachedViewedThread: CodexViewedThread?
 
     func latestSnapshot() -> CodexStatusSnapshot {
         let observedRollouts = newestRollouts().compactMap(cachedActivity(for:))
@@ -78,18 +85,18 @@ final class CodexTaskMonitor: @unchecked Sendable {
         if let completion = rollouts.first(where: {
             $0.activity.phase == .completed && Date().timeIntervalSince($0.activity.eventDate) < 8
         }) {
-            return CodexStatusSnapshot(primary: completion.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: completion.task, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
+            return CodexStatusSnapshot(primary: completion.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: completion.task, viewedThread: desktopState.viewedThread, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
         }
         if let active = rollouts.first(where: { [.running, .review, .waiting, .failed].contains($0.activity.phase) }) {
-            return CodexStatusSnapshot(primary: active.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
+            return CodexStatusSnapshot(primary: active.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
         }
         let idle = CodexActivity(phase: .idle, label: "Codex 空闲", eventDate: .distantPast, startedAt: nil)
-        return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
+        return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
     }
 
-    private func latestDesktopState() -> (itemCount: Int?, updatedAt: Date?) {
+    private func latestDesktopState() -> (viewedThread: CodexViewedThread?, itemCount: Int?, updatedAt: Date?) {
         guard let logURL = desktopLogURL(),
-              let handle = try? FileHandle(forReadingFrom: logURL) else { return (nil, nil) }
+              let handle = try? FileHandle(forReadingFrom: logURL) else { return (nil, nil, nil) }
         defer { try? handle.close() }
         let length = (try? handle.seekToEnd()) ?? 0
         if desktopStateLogURL != logURL || length < desktopLogOffset {
@@ -97,31 +104,46 @@ final class CodexTaskMonitor: @unchecked Sendable {
             desktopLogOffset = length > 8_000_000 ? length - 8_000_000 : 0
             cachedPetStackItemCount = nil
             cachedPetStackUpdatedAt = nil
+            cachedViewedThread = nil
         }
         guard length > desktopLogOffset else {
-            return (cachedPetStackItemCount, cachedPetStackUpdatedAt)
+            return (cachedViewedThread, cachedPetStackItemCount, cachedPetStackUpdatedAt)
         }
         try? handle.seek(toOffset: desktopLogOffset)
         let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
         desktopLogOffset = length
         let petStackPattern = #"Native pet composition preparation sent .*activityStackItemCount=([0-9]+).*id=mascot-badge"#
-        guard let petStackExpression = try? NSRegularExpression(pattern: petStackPattern) else {
-            return (nil, nil)
+        let viewedPattern = #"thread_stream_view_activity_changed active=true conversationId=([0-9a-f-]+).*rendererWindowFocused=true"#
+        guard let petStackExpression = try? NSRegularExpression(pattern: petStackPattern),
+              let viewedExpression = try? NSRegularExpression(pattern: viewedPattern) else {
+            return (nil, nil, nil)
         }
+        var foundPetStack = false
+        var foundViewedThread = false
         for line in text.split(separator: "\n").reversed() {
             let value = String(line)
             let range = NSRange(value.startIndex..., in: value)
-            if let match = petStackExpression.firstMatch(in: value, range: range),
+            if !foundPetStack,
+               let match = petStackExpression.firstMatch(in: value, range: range),
                let countRange = Range(match.range(at: 1), in: value),
                let count = Int(value[countRange]),
                let timestamp = value.split(separator: " ", maxSplits: 1).first,
                let updatedAt = Self.parseDate(String(timestamp)) {
                 cachedPetStackItemCount = count
                 cachedPetStackUpdatedAt = updatedAt
-                break
+                foundPetStack = true
             }
+            if !foundViewedThread,
+               let match = viewedExpression.firstMatch(in: value, range: range),
+               let idRange = Range(match.range(at: 1), in: value),
+               let timestamp = value.split(separator: " ", maxSplits: 1).first,
+               let viewedAt = Self.parseDate(String(timestamp)) {
+                cachedViewedThread = CodexViewedThread(id: String(value[idRange]), viewedAt: viewedAt)
+                foundViewedThread = true
+            }
+            if foundPetStack, foundViewedThread { break }
         }
-        return (cachedPetStackItemCount, cachedPetStackUpdatedAt)
+        return (cachedViewedThread, cachedPetStackItemCount, cachedPetStackUpdatedAt)
     }
 
     private func desktopLogURL() -> URL? {
@@ -269,6 +291,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
         var lastLabel = "Codex 空闲"
         var lastMessage: String?
         var lastEventDate = modified
+        var completionDate: Date?
         var taskStartedAt: Date?
         var sessionID = file.deletingPathExtension().lastPathComponent
         var project = "Codex"
@@ -307,6 +330,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
                 lastPhase = .running; lastLabel = "Codex 正在处理"; taskStartedAt = lastEventDate
             case "task_complete":
                 lastPhase = .completed
+                completionDate = lastEventDate
                 lastLabel = lastMessage.map(Self.summary) ?? "任务完成"
             case "agent_message":
                 if let message = payload["message"] as? String, !message.isEmpty {
@@ -325,7 +349,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
         let activity = CodexActivity(
             phase: lastPhase,
             label: lastLabel,
-            eventDate: lastEventDate,
+            eventDate: lastPhase == .completed ? completionDate ?? lastEventDate : lastEventDate,
             startedAt: taskStartedAt
         )
         let task = CodexTaskItem(
