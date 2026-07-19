@@ -234,21 +234,33 @@ final class NotchModel: ObservableObject {
                 provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { [weak self] item, _ in
                     let url: URL? = (item as? URL) ?? (item as? Data).flatMap { URL(dataRepresentation: $0, relativeTo: nil) }
                     let label = url?.lastPathComponent ?? "文件"
-                    Task { @MainActor in self?.accept(label: label) }
+                    let prompt = url.map { "请分析这个文件：\n\($0.path)" }
+                        ?? "请分析我刚刚拖入的文件。"
+                    Task { @MainActor in self?.accept(label: label, prompt: prompt) }
                 }
                 return true
             }
             if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
                 provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { [weak self] item, _ in
-                    let label = (item as? URL)?.host ?? "网页链接"
-                    Task { @MainActor in self?.accept(label: label) }
+                    let url = item as? URL
+                    let label = url?.host ?? "网页链接"
+                    let prompt = url.map { "请打开并分析这个网页：\n\($0.absoluteString)" }
+                        ?? "请分析我刚刚拖入的网页链接。"
+                    Task { @MainActor in self?.accept(label: label, prompt: prompt) }
                 }
                 return true
             }
             if provider.canLoadObject(ofClass: NSString.self) {
                 provider.loadObject(ofClass: NSString.self) { [weak self] value, _ in
                     let text = (value as? NSString).map(String.init) ?? ""
-                    Task { @MainActor in self?.accept(label: text.isEmpty ? "文字" : String(text.prefix(32))) }
+                    let excerpt = String(text.prefix(12_000))
+                    let prompt = excerpt.isEmpty ? "请分析我刚刚拖入的文字。" : "请分析下面的内容：\n\n\(excerpt)"
+                    Task { @MainActor in
+                        self?.accept(
+                            label: text.isEmpty ? "文字" : String(text.prefix(32)),
+                            prompt: prompt
+                        )
+                    }
                 }
                 return true
             }
@@ -256,10 +268,14 @@ final class NotchModel: ObservableObject {
         return false
     }
 
-    private func accept(label: String) {
-        latestDrop = "已收到：\(label)"
+    private func accept(label: String, prompt: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(prompt, forType: .string)
+        latestDrop = "已复制分析指令：\(label) · 到 Codex 粘贴发送"
         if !isExpanded { toggleExpanded() }
         state = .jumping
+        openCodex()
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(1.3))
             if self?.state == .jumping { self?.state = .review }

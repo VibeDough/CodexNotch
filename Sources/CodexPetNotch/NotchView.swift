@@ -53,7 +53,7 @@ struct NotchView: View {
                     .transition(.scale(scale: 0.92, anchor: .top).combined(with: .opacity))
             }
         }
-        .frame(maxWidth: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background {
             if model.usesCompactBar && !showsDetails && !model.isExpanded {
                 Capsule().fill(.black)
@@ -82,7 +82,6 @@ struct NotchView: View {
         .onDrop(of: [UTType.fileURL, UTType.url, UTType.utf8PlainText], isTargeted: $model.isDropTargeted) {
             model.receive(providers: $0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var collapsedBar: some View {
@@ -663,10 +662,10 @@ private struct EdgeGlowBorder: View {
                                 LinearGradient(
                                     stops: [
                                         .init(color: .clear, location: 0),
-                                        .init(color: .white.opacity(0.06), location: 0.15),
-                                        .init(color: .white.opacity(0.22), location: 0.3),
-                                        .init(color: .white.opacity(0.6), location: 0.45),
-                                        .init(color: .white, location: 0.6)
+                                        .init(color: .white.opacity(0.18), location: 0.04),
+                                        .init(color: .white.opacity(0.35), location: 0.18),
+                                        .init(color: .white.opacity(0.65), location: 0.35),
+                                        .init(color: .white, location: 0.55)
                                     ],
                                     startPoint: .top,
                                     endPoint: .bottom
