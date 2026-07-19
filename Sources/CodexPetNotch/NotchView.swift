@@ -802,13 +802,27 @@ private struct EdgeGlowBorder: View {
             angle: .degrees(angle)
         )
         if compact {
-            Capsule()
-                .stroke(style, lineWidth: 2.7)
-                .shadow(color: color.opacity(0.65), radius: 2.8)
-                .shadow(color: color.opacity(0.24), radius: 7)
-                .padding(1.4)
+            ZStack {
+                Capsule()
+                    .stroke(style, lineWidth: 8)
+                    .blur(radius: 3)
+                    .opacity(0.28)
+                Capsule()
+                    .stroke(style, lineWidth: 2.7)
+                    .shadow(color: color.opacity(0.65), radius: 2.8)
+            }
+            .padding(1.4)
         } else {
             ZStack {
+                IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
+                    .stroke(
+                        style,
+                        style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
+                    )
+                    .blur(radius: 3)
+                    .opacity(0.28)
+                    .mask { EdgeBodyMask(tipHeight: 18).fill(.white) }
+
                 IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
                     .stroke(
                         style,
@@ -816,7 +830,6 @@ private struct EdgeGlowBorder: View {
                     )
                     .mask { EdgeBodyMask(tipHeight: 18).fill(.white) }
                     .shadow(color: color.opacity(0.65), radius: 2.8)
-                    .shadow(color: color.opacity(0.24), radius: 7)
 
                 EdgeTaperTips(tipHeight: 18, baseWidth: 3.2)
                     .fill(style)
