@@ -44,9 +44,11 @@ final class CodexTaskMonitor: @unchecked Sendable {
     private var cachedTodayTokens = 0
     private var cachedUsageLimit: CodexUsageLimit?
     private var tokenCacheDate = Date.distantPast
+    private var pendingConfirmations: [String: MonitoredRollout] = [:]
 
     func latestSnapshot() -> CodexStatusSnapshot {
-        let rollouts = newestRollouts().compactMap(activity(for:))
+        let observedRollouts = newestRollouts().compactMap(activity(for:))
+        let rollouts = reconciledRollouts(observedRollouts)
         let usageStats = todayUsageStats()
         let activePhases: [CodexActivity.Phase] = [.running, .review, .waiting]
         let tasks = rollouts.filter { activePhases.contains($0.activity.phase) }.map(\.task)
@@ -60,6 +62,29 @@ final class CodexTaskMonitor: @unchecked Sendable {
         }
         let idle = CodexActivity(phase: .idle, label: "Codex 空闲", eventDate: .distantPast, startedAt: nil)
         return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil)
+    }
+
+    private func reconciledRollouts(_ observed: [MonitoredRollout]) -> [MonitoredRollout] {
+        for rollout in observed {
+            if rollout.activity.phase == .waiting {
+                pendingConfirmations[rollout.task.id] = rollout
+            } else {
+                pendingConfirmations.removeValue(forKey: rollout.task.id)
+            }
+        }
+
+        let cutoff = Date().addingTimeInterval(-600)
+        pendingConfirmations = pendingConfirmations.filter { $0.value.activity.eventDate >= cutoff }
+
+        var bySession = Dictionary(uniqueKeysWithValues: pendingConfirmations.map { ($0.key, $0.value) })
+        for rollout in observed where rollout.activity.phase != .waiting {
+            if let current = bySession[rollout.task.id],
+               current.activity.eventDate > rollout.activity.eventDate {
+                continue
+            }
+            bySession[rollout.task.id] = rollout
+        }
+        return bySession.values.sorted { $0.activity.eventDate > $1.activity.eventDate }
     }
 
     private func todayUsageStats() -> (tokens: Int, limit: CodexUsageLimit?) {
