@@ -30,7 +30,13 @@ struct NotchView: View {
             } else if showsTaskDetails {
                 taskDetails
             } else if let task = model.primaryTask {
-                persistentTaskStatus(task)
+                VStack(spacing: 0) {
+                    persistentTaskStatus(task)
+                    if let completedTask = model.completedTask,
+                       model.visibleCompletionMessage != nil {
+                        compactCompletedTaskStatus(completedTask)
+                    }
+                }
             } else if let message = model.visibleCompletionMessage,
                       let task = model.completedTask {
                 completedTaskStatus(message: message, task: task)
@@ -546,6 +552,41 @@ struct NotchView: View {
         .frame(maxWidth: .infinity, minHeight: 42)
     }
 
+    private func compactCompletedTaskStatus(_ task: CodexTaskItem) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "square.stack.3d.down.right.fill")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.white.opacity(0.5))
+            Text(task.title)
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.76))
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            if model.pendingCompletionCount > 1 {
+                Text("+\(model.pendingCompletionCount - 1)")
+                    .font(.system(size: 9, weight: .black, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.65))
+            }
+            Button { model.acknowledgeCompletedTask(task) } label: {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(Color(red: 0.1, green: 0.55, blue: 0.28))
+                    .frame(width: 24, height: 24)
+                    .background(Color(red: 0.72, green: 0.94, blue: 0.79), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .help("查看已完成任务")
+        }
+        .padding(.horizontal, 13)
+        .frame(maxWidth: .infinity, minHeight: 36)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(.white.opacity(0.08))
+                .frame(height: 1)
+        }
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
     private func confirmationCard(_ task: CodexTaskItem) -> some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
@@ -779,7 +820,12 @@ private struct EdgeGlowBorder: View {
 
 private struct IslandEdgeShape: Shape {
     let shoulder: CGFloat
-    let bottomRadius: CGFloat
+    var bottomRadius: CGFloat
+
+    var animatableData: CGFloat {
+        get { bottomRadius }
+        set { bottomRadius = newValue }
+    }
 
     func path(in rect: CGRect) -> Path {
         let edgeInset: CGFloat = 1.4

@@ -27,6 +27,7 @@ enum NotchPresentationMode: Equatable {
     case drop
     case settings
     case task
+    case taskWithCompletion
     case taskList(Int)
     case waiting
     case completion
@@ -61,6 +62,7 @@ final class NotchModel: ObservableObject {
     @Published var usageLimit: CodexUsageLimit?
     @Published var completionMessage: String?
     @Published var completedTask: CodexTaskItem?
+    @Published var pendingCompletionCount = 0
     @Published var statusAnimationStartedAt = Date()
 
     private var activityTimer: Timer?
@@ -237,7 +239,9 @@ final class NotchModel: ObservableObject {
         if isShowingSettings { return .settings }
         if waitingTask != nil { return .waiting }
         if isTaskStatusPinned, activeTasks.count > 1 { return .taskList(activeTasks.count) }
-        if primaryTask != nil { return .task }
+        if primaryTask != nil {
+            return visibleCompletionMessage == nil ? .task : .taskWithCompletion
+        }
         if visibleCompletionMessage != nil { return .completion }
         if isHovered { return .usage }
         return usesCompactBar ? .compactIdle : .idle
@@ -251,6 +255,7 @@ final class NotchModel: ObservableObject {
         case .drop: CGSize(width: 450, height: 138)
         case .settings: CGSize(width: 450, height: 138)
         case .task: CGSize(width: 450, height: 86)
+        case .taskWithCompletion: CGSize(width: 450, height: 122)
         case let .taskList(count): CGSize(width: 450, height: 80 + CGFloat(count * 40))
         case .waiting: CGSize(width: 450, height: 94)
         case .completion: CGSize(width: 450, height: completedTask == nil ? 88 : 86)
@@ -499,6 +504,7 @@ final class NotchModel: ObservableObject {
     }
 
     private func showNextCompletion() {
+        pendingCompletionCount = pendingCompletions.count
         completedTask = pendingCompletions.first?.task
         completionMessage = pendingCompletions.first?.message
         NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
