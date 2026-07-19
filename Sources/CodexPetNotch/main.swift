@@ -130,7 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let bodyWidth: CGFloat = 450
         let wingWidth: CGFloat = 42
         let bodyLeft = screen.frame.midX - bodyWidth / 2
-        let y = screen.frame.maxY - 7
+        let y = screen.frame.maxY - 6
         let overlap: CGFloat = 0.5
         glowPanels[0].setFrame(NSRect(x: bodyLeft - wingWidth + overlap, y: y, width: wingWidth, height: 6), display: true)
         glowPanels[1].setFrame(NSRect(x: bodyLeft + bodyWidth - overlap, y: y, width: wingWidth, height: 6), display: true)

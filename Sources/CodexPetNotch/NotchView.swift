@@ -717,7 +717,6 @@ private struct EdgeGlowBorder: View {
             Capsule()
                 .stroke(style, lineWidth: 2.7)
                 .shadow(color: color.opacity(0.65), radius: 2.8)
-                .padding(1)
         } else {
             IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
                 .stroke(
@@ -725,7 +724,6 @@ private struct EdgeGlowBorder: View {
                     style: StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round)
                 )
                 .shadow(color: color.opacity(0.65), radius: 2.8)
-                .padding(1)
         }
     }
 }
