@@ -450,8 +450,9 @@ final class NotchModel: ObservableObject {
         if let viewedThread = snapshot.viewedThread {
             acknowledgeViewedCompletion(viewedThread)
         }
-        if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.openai.codex",
-           let activeThreadID = snapshot.activeThreadID {
+        if let activeThreadID = snapshot.activeThreadID,
+           let unreadThreadIDs = snapshot.unreadThreadIDs,
+           !unreadThreadIDs.contains(activeThreadID) {
             acknowledgeActiveCompletion(threadID: activeThreadID)
         }
         if let unreadThreadIDs = snapshot.unreadThreadIDs,
