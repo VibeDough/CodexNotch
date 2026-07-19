@@ -28,6 +28,7 @@ final class NotchModel: ObservableObject {
     @Published var isHovered = false
     @Published var isDropTargeted = false
     @Published var latestDrop = "拖入文件、网址或文字"
+    @Published var pendingDropPrompt: String?
     @Published var clockTick = Date()
     @Published var activeTaskCount = 0
     @Published var activeTasks: [CodexTaskItem] = []
@@ -269,16 +270,34 @@ final class NotchModel: ObservableObject {
     }
 
     private func accept(label: String, prompt: String) {
+        pendingDropPrompt = prompt
+        latestDrop = "已准备：\(label)"
+        if !isExpanded { toggleExpanded() }
+        state = .review
+    }
+
+    func startNewConversationFromDrop() {
+        guard let prompt = pendingDropPrompt else { return }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(prompt, forType: .string)
-        latestDrop = "已复制分析指令：\(label) · 到 Codex 粘贴发送"
-        if !isExpanded { toggleExpanded() }
+        latestDrop = "正在 Codex 新建对话"
         state = .jumping
-        openCodex()
+
+        var components = URLComponents()
+        components.scheme = "codex"
+        components.host = "newThread"
+        components.queryItems = [URLQueryItem(name: "prompt", value: prompt)]
+        if let url = components.url, NSWorkspace.shared.open(url) == false {
+            openCodex()
+        }
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(1.3))
-            if self?.state == .jumping { self?.state = .review }
+            guard let self else { return }
+            if self.state == .jumping { self.state = .review }
+            self.pendingDropPrompt = nil
+            self.latestDrop = "拖入文件、网址或文字"
+            self.collapse()
         }
     }
 

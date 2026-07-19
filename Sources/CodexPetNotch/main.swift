@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var panel: NotchPanel?
+    private var hostingView: NSHostingView<NotchView>?
     private var environmentTimer: Timer?
     private var hoverTimer: Timer?
     private var pendingResizeTask: Task<Void, Never>?
@@ -56,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let hostingView = NSHostingView(rootView: root)
         let initialSize = notchSize(expanded: false)
         hostingView.frame = NSRect(origin: .zero, size: initialSize)
+        hostingView.autoresizingMask = [.width, .height]
 
         let panel = NotchPanel(
             contentRect: hostingView.frame,
@@ -64,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             defer: false
         )
         panel.contentView = hostingView
+        panel.contentView?.autoresizingMask = [.width, .height]
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
@@ -72,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.hidesOnDeactivate = false
         panel.delegate = self
         panel.onEscape = { [weak self] in self?.model.collapse() }
+        self.hostingView = hostingView
         self.panel = panel
     }
 
@@ -132,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             width: size.width,
             height: size.height
         ), display: true)
+        syncHostingViewToPanel()
     }
 
     private func notchSize(expanded: Bool, on screen: NSScreen? = nil) -> NSSize {
@@ -154,10 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if screen.safeAreaInsets.top <= 0 {
             return NSSize(width: 270, height: model.visibleCompletionMessage == nil ? 36 : 80)
         }
-        return NSSize(
-            width: 450,
-            height: model.visibleCompletionMessage == nil ? 44 : 88
-        )
+        return NSSize(width: 310, height: 38)
     }
 
     private func resizeForCurrentState() {
@@ -183,6 +185,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Keep the physical top edge pixel-locked. Animating the panel origin and
         // height together can expose a one-frame seam below the camera housing.
         panel.setFrame(frame, display: true)
+        syncHostingViewToPanel()
     }
 
     private func applyCurrentFrame() {
@@ -195,6 +198,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             width: size.width,
             height: size.height
         ), display: true)
+        syncHostingViewToPanel()
+    }
+
+    private func syncHostingViewToPanel() {
+        guard let panel, let hostingView else { return }
+        hostingView.frame = NSRect(origin: .zero, size: panel.frame.size)
+        hostingView.needsLayout = true
+        hostingView.layoutSubtreeIfNeeded()
     }
 
     func windowDidResignKey(_ notification: Notification) { model.collapse() }

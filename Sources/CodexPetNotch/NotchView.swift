@@ -155,7 +155,7 @@ struct NotchView: View {
             .animation(.easeOut(duration: 0.14), value: model.isHovered)
         }
         .padding(.horizontal, 10)
-        .frame(height: model.usesCompactBar ? 36 : 44)
+        .frame(height: collapsedBarHeight)
         .contentShape(Rectangle())
         .onTapGesture {
             if model.activeTaskCount > 0 {
@@ -171,6 +171,16 @@ struct NotchView: View {
         .contextMenu {
             Button("退出") { NSApplication.shared.terminate(nil) }
         }
+    }
+
+    private var collapsedBarHeight: CGFloat {
+        let isIdle = model.activeTasks.isEmpty
+            && model.visibleCompletionMessage == nil
+            && model.waitingTask == nil
+            && !model.isExpanded
+            && !model.isShowingSettings
+            && !model.isHovered
+        return model.usesCompactBar ? 36 : (isIdle ? 38 : 44)
     }
 
     @ViewBuilder
@@ -546,14 +556,28 @@ struct NotchView: View {
                 .buttonStyle(.plain)
             }
 
-            HStack(spacing: 7) {
-                Image(systemName: "arrow.down.doc.fill")
-                Text(model.isDropTargeted ? "松开，交给 Codex" : "把文件、网址或文字拖到这里")
+            if model.pendingDropPrompt != nil {
+                Button(action: model.startNewConversationFromDrop) {
+                    HStack(spacing: 7) {
+                        Image(systemName: "plus.message.fill")
+                        Text("在 Codex 新建对话")
+                    }
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+            } else {
+                HStack(spacing: 7) {
+                    Image(systemName: "arrow.down.doc.fill")
+                    Text(model.isDropTargeted ? "松开，交给 Codex" : "把文件、网址或文字拖到这里")
+                }
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(model.isDropTargeted ? .white : .white.opacity(0.55))
+                .frame(maxWidth: .infinity, minHeight: 36)
+                .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
             }
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(model.isDropTargeted ? .white : .white.opacity(0.55))
-            .frame(maxWidth: .infinity, minHeight: 36)
-            .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 11)
@@ -662,10 +686,10 @@ private struct EdgeGlowBorder: View {
                                 LinearGradient(
                                     stops: [
                                         .init(color: .clear, location: 0),
-                                        .init(color: .white.opacity(0.18), location: 0.04),
-                                        .init(color: .white.opacity(0.35), location: 0.18),
-                                        .init(color: .white.opacity(0.65), location: 0.35),
-                                        .init(color: .white, location: 0.55)
+                                        .init(color: .white.opacity(0.08), location: 0.015),
+                                        .init(color: .white.opacity(0.32), location: 0.07),
+                                        .init(color: .white.opacity(0.72), location: 0.2),
+                                        .init(color: .white, location: 0.34)
                                     ],
                                     startPoint: .top,
                                     endPoint: .bottom
@@ -734,7 +758,7 @@ private struct IslandEdgeShape: Shape {
 
 private struct EdgeTaperMask: Shape {
     func path(in rect: CGRect) -> Path {
-        let fullWidthStart = min(rect.height * 0.42, rect.height - 18)
+        let fullWidthStart = min(rect.height * 0.3, rect.height - 18)
         let fadeOutY: CGFloat = 0
         let maskWidth: CGFloat = 3.5
         let leftStrokeCenter: CGFloat = 1.3
