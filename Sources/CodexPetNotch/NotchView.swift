@@ -663,10 +663,10 @@ private struct EdgeGlowBorder: View {
                                 LinearGradient(
                                     stops: [
                                         .init(color: .clear, location: 0),
-                                        .init(color: .clear, location: 0.14),
-                                        .init(color: .white.opacity(0.08), location: 0.25),
-                                        .init(color: .white.opacity(0.5), location: 0.42),
-                                        .init(color: .white, location: 0.58)
+                                        .init(color: .white.opacity(0.06), location: 0.15),
+                                        .init(color: .white.opacity(0.22), location: 0.3),
+                                        .init(color: .white.opacity(0.6), location: 0.45),
+                                        .init(color: .white, location: 0.6)
                                     ],
                                     startPoint: .top,
                                     endPoint: .bottom
@@ -736,7 +736,7 @@ private struct IslandEdgeShape: Shape {
 private struct EdgeTaperMask: Shape {
     func path(in rect: CGRect) -> Path {
         let fullWidthStart = min(rect.height * 0.42, rect.height - 18)
-        let fadeOutY = min(CGFloat(8), fullWidthStart)
+        let fadeOutY: CGFloat = 0
         let maskWidth: CGFloat = 3.5
         let leftStrokeCenter: CGFloat = 1.3
         let rightStrokeCenter = rect.maxX - leftStrokeCenter
