@@ -414,9 +414,16 @@ struct NotchView: View {
                 }
                 Spacer(minLength: 6)
                 if model.activeTaskCount > 1 {
-                    Text("+\(model.activeTaskCount - 1)")
-                        .font(.system(size: 10, weight: .black, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.72))
+                    HStack(spacing: 3) {
+                        Text("+\(model.activeTaskCount - 1)")
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 7.5, weight: .black))
+                    }
+                    .font(.system(size: 10, weight: .black, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.82))
+                    .padding(.horizontal, 7)
+                    .frame(height: 22)
+                    .background(.white.opacity(0.1), in: Capsule())
                 }
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(modelName(task.model))
@@ -428,6 +435,7 @@ struct NotchView: View {
             }
             .padding(.horizontal, 13)
             .frame(maxWidth: .infinity, minHeight: 42)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(model.activeTaskCount > 1 ? "展开全部任务" : "展开任务详情")
@@ -545,37 +553,50 @@ struct NotchGlowWing: View {
                 let liveColor = model.connectionState == .disconnected
                     ? Color.red
                     : Color(hue: hue, saturation: 0.82, brightness: 1)
-                let phase = timeline.date.timeIntervalSinceReferenceDate
-                    .truncatingRemainder(dividingBy: 1.8) / 1.8
-                GeometryReader { proxy in
-                    let headX = proxy.size.width * (pointsOutwardToLeft ? 1 - phase : phase)
-                    ZStack(alignment: .leading) {
+                WingTaperShape(pointsOutwardToLeft: pointsOutwardToLeft)
+                    .fill(
                         LinearGradient(
-                            colors: pointsOutwardToLeft
-                                ? [.clear, liveColor.opacity(0.72)]
-                                : [liveColor.opacity(0.72), .clear],
+                            stops: pointsOutwardToLeft
+                                ? [
+                                    .init(color: .clear, location: 0),
+                                    .init(color: .clear, location: 0.2),
+                                    .init(color: liveColor.opacity(0.18), location: 0.58),
+                                    .init(color: liveColor.opacity(0.78), location: 1)
+                                ]
+                                : [
+                                    .init(color: liveColor.opacity(0.78), location: 0),
+                                    .init(color: liveColor.opacity(0.18), location: 0.42),
+                                    .init(color: .clear, location: 0.8),
+                                    .init(color: .clear, location: 1)
+                                ],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
-                        Capsule()
-                            .fill(liveColor)
-                            .frame(width: 14, height: 2.8)
-                            .offset(x: headX - 7)
-                            .mask {
-                                LinearGradient(
-                                    colors: pointsOutwardToLeft ? [.clear, .white] : [.white, .clear],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            }
-                    }
-                    .frame(height: 2.8)
-                    .shadow(color: liveColor.opacity(0.6), radius: 2.4)
-                }
-                .frame(height: 3)
+                    )
+                    .shadow(color: liveColor.opacity(0.42), radius: 1.6)
+                .frame(height: 3.2)
                 .frame(maxHeight: .infinity, alignment: .top)
             }
         }
+    }
+}
+
+private struct WingTaperShape: Shape {
+    let pointsOutwardToLeft: Bool
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        if pointsOutwardToLeft {
+            path.move(to: CGPoint(x: rect.minX, y: rect.midY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        } else {
+            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        }
+        path.closeSubpath()
+        return path
     }
 }
 
@@ -737,7 +758,7 @@ private struct EdgeTaperMask: Shape {
     func path(in rect: CGRect) -> Path {
         let fullWidthStart = min(rect.height * 0.42, rect.height - 18)
         let fadeOutY: CGFloat = 0
-        let maskWidth: CGFloat = 9
+        let maskWidth: CGFloat = 3.5
         let leftStrokeCenter: CGFloat = 1.3
         let rightStrokeCenter = rect.maxX - leftStrokeCenter
         var path = Path()

@@ -2,7 +2,7 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-APP="$ROOT/dist/Codex Pet Notch.app"
+APP="$ROOT/dist/49labs Assistant Notch.app"
 
 cd "$ROOT"
 swift build -c release --jobs 2
