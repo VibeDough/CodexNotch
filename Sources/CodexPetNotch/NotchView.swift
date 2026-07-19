@@ -145,7 +145,12 @@ struct NotchView: View {
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(model.isShowingSettings ? .black : .white)
                                 .frame(width: 28, height: 28)
-                                .background(model.isShowingSettings ? .white : .white.opacity(0.1), in: Circle())
+                                .background {
+                                    Circle()
+                                        .fill(model.isShowingSettings ? .white : .white.opacity(0.1))
+                                        .frame(width: model.isShowingSettings ? 24 : 28,
+                                               height: model.isShowingSettings ? 24 : 28)
+                                }
                         }
                         .buttonStyle(.plain)
                         .help("设置")
