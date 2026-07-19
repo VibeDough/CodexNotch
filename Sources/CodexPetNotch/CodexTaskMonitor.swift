@@ -16,6 +16,8 @@ struct CodexStatusSnapshot {
     let usageLimit: CodexUsageLimit?
     let completedTask: CodexTaskItem?
     let viewedThread: CodexViewedThread?
+    let unreadThreadIDs: Set<String>?
+    let unreadUpdatedAt: Date?
 }
 
 struct CodexViewedThread {
@@ -57,41 +59,65 @@ final class CodexTaskMonitor: @unchecked Sendable {
         let observedRollouts = newestRollouts().compactMap(activity(for:))
         let rollouts = reconciledRollouts(observedRollouts)
         let usageStats = todayUsageStats()
-        let viewedThread = latestViewedThread()
+        let desktopState = latestDesktopState()
         let activePhases: [CodexActivity.Phase] = [.running, .review, .waiting]
         let tasks = rollouts.filter { activePhases.contains($0.activity.phase) }.map(\.task)
         if let completion = rollouts.first(where: {
             $0.activity.phase == .completed && Date().timeIntervalSince($0.activity.eventDate) < 8
         }) {
-            return CodexStatusSnapshot(primary: completion.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: completion.task, viewedThread: viewedThread)
+            return CodexStatusSnapshot(primary: completion.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: completion.task, viewedThread: desktopState.viewedThread, unreadThreadIDs: desktopState.unreadThreadIDs, unreadUpdatedAt: desktopState.unreadUpdatedAt)
         }
         if let active = rollouts.first(where: { [.running, .review, .waiting, .failed].contains($0.activity.phase) }) {
-            return CodexStatusSnapshot(primary: active.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: viewedThread)
+            return CodexStatusSnapshot(primary: active.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, unreadThreadIDs: desktopState.unreadThreadIDs, unreadUpdatedAt: desktopState.unreadUpdatedAt)
         }
         let idle = CodexActivity(phase: .idle, label: "Codex 空闲", eventDate: .distantPast, startedAt: nil)
-        return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: viewedThread)
+        return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, unreadThreadIDs: desktopState.unreadThreadIDs, unreadUpdatedAt: desktopState.unreadUpdatedAt)
     }
 
-    private func latestViewedThread() -> CodexViewedThread? {
+    private func latestDesktopState() -> (viewedThread: CodexViewedThread?, unreadThreadIDs: Set<String>?, unreadUpdatedAt: Date?) {
         guard let logURL = desktopLogURL(),
-              let handle = try? FileHandle(forReadingFrom: logURL) else { return nil }
+              let handle = try? FileHandle(forReadingFrom: logURL) else { return (nil, nil, nil) }
         defer { try? handle.close() }
         let length = (try? handle.seekToEnd()) ?? 0
-        let sampleSize: UInt64 = 80_000
+        let sampleSize: UInt64 = 1_000_000
         try? handle.seek(toOffset: length > sampleSize ? length - sampleSize : 0)
         let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
-        let pattern = #"thread_stream_view_activity_changed active=true conversationId=([0-9a-f-]+).*rendererWindowFocused=true"#
-        guard let expression = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let viewedPattern = #"thread_stream_view_activity_changed active=true conversationId=([0-9a-f-]+).*rendererWindowFocused=true"#
+        let unreadPattern = #"\"id\":\"([0-9a-f-]+)\".*?\"hasUnreadTurn\":(true|false)"#
+        guard let viewedExpression = try? NSRegularExpression(pattern: viewedPattern),
+              let unreadExpression = try? NSRegularExpression(pattern: unreadPattern) else {
+            return (nil, nil, nil)
+        }
+        var viewedThread: CodexViewedThread?
+        var unreadThreadIDs: Set<String>?
+        var unreadUpdatedAt: Date?
         for line in text.split(separator: "\n").reversed() {
             let value = String(line)
             let range = NSRange(value.startIndex..., in: value)
-            guard let match = expression.firstMatch(in: value, range: range),
-                  let idRange = Range(match.range(at: 1), in: value),
-                  let timestamp = value.split(separator: " ", maxSplits: 1).first,
-                  let viewedAt = Self.parseDate(String(timestamp)) else { continue }
-            return CodexViewedThread(id: String(value[idRange]), viewedAt: viewedAt)
+            if viewedThread == nil,
+               let match = viewedExpression.firstMatch(in: value, range: range),
+               let idRange = Range(match.range(at: 1), in: value),
+               let timestamp = value.split(separator: " ", maxSplits: 1).first,
+               let viewedAt = Self.parseDate(String(timestamp)) {
+                viewedThread = CodexViewedThread(id: String(value[idRange]), viewedAt: viewedAt)
+            }
+            if unreadThreadIDs == nil, value.contains("hasUnreadTurn"),
+               let timestamp = value.split(separator: " ", maxSplits: 1).first,
+               let updatedAt = Self.parseDate(String(timestamp)) {
+                let decodedValue = value.replacingOccurrences(of: "\\\"", with: "\"")
+                let decodedRange = NSRange(decodedValue.startIndex..., in: decodedValue)
+                let matches = unreadExpression.matches(in: decodedValue, range: decodedRange)
+                unreadThreadIDs = Set(matches.compactMap { match in
+                    guard let stateRange = Range(match.range(at: 2), in: decodedValue),
+                          decodedValue[stateRange] == "true",
+                          let idRange = Range(match.range(at: 1), in: decodedValue) else { return nil }
+                    return String(decodedValue[idRange])
+                })
+                unreadUpdatedAt = updatedAt
+            }
+            if viewedThread != nil, unreadThreadIDs != nil { break }
         }
-        return nil
+        return (viewedThread, unreadThreadIDs, unreadUpdatedAt)
     }
 
     private func desktopLogURL() -> URL? {

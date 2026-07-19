@@ -450,6 +450,10 @@ final class NotchModel: ObservableObject {
         if let viewedThread = snapshot.viewedThread {
             acknowledgeViewedCompletion(viewedThread)
         }
+        if let unreadThreadIDs = snapshot.unreadThreadIDs,
+           let unreadUpdatedAt = snapshot.unreadUpdatedAt {
+            acknowledgeReadCompletions(unreadThreadIDs: unreadThreadIDs, updatedAt: unreadUpdatedAt)
+        }
         if taskLayoutChanged {
             NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
         }
@@ -539,6 +543,17 @@ final class NotchModel: ObservableObject {
         pendingCompletions.removeAll { completion in
             viewed.contains { $0.key == completion.key }
         }
+        showNextCompletion()
+    }
+
+    private func acknowledgeReadCompletions(unreadThreadIDs: Set<String>, updatedAt: Date) {
+        let read = pendingCompletions.filter {
+            $0.eventDate <= updatedAt && !unreadThreadIDs.contains($0.task.id)
+        }
+        guard !read.isEmpty else { return }
+        acknowledgedCompletionKeys.formUnion(read.map(\.key))
+        let readKeys = Set(read.map(\.key))
+        pendingCompletions.removeAll { readKeys.contains($0.key) }
         showNextCompletion()
     }
 
