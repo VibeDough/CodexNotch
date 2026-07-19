@@ -32,12 +32,14 @@ struct NotchView: View {
             } else if let task = model.primaryTask {
                 VStack(spacing: 0) {
                     persistentTaskStatus(task)
-                    if let completedTask = model.completedTask,
+                    if !model.isCompletionStackCollapsed,
+                       let completedTask = model.completedTask,
                        model.visibleCompletionMessage != nil {
                         compactCompletedTaskStatus(completedTask)
                     }
                 }
-            } else if let message = model.visibleCompletionMessage,
+            } else if !model.isCompletionStackCollapsed,
+                      let message = model.visibleCompletionMessage,
                       let task = model.completedTask {
                 completedTaskStatus(message: message, task: task)
             } else if model.activeTasks.isEmpty,
@@ -56,6 +58,7 @@ struct NotchView: View {
             }
         }
         .frame(width: visualSize.width, height: visualSize.height, alignment: .top)
+        .clipped()
         .ignoresSafeArea(.all)
         .background {
             if model.usesCompactBar && !showsDetails && !model.isExpanded {
