@@ -26,7 +26,6 @@ final class NotchModel: ObservableObject {
     @Published var usesCompactBar = false
     @Published var connectionState: CodexConnectionState = .connected
     @Published var isHovered = false
-    @Published var isHoverContentVisible = false
     @Published var isDropTargeted = false
     @Published var latestDrop = "拖入文件、网址或文字"
     @Published var pendingDropPrompt: String?
@@ -83,7 +82,6 @@ final class NotchModel: ObservableObject {
             guard !Task.isCancelled, let self, self.isHovered != hovered else { return }
             self.pendingHoverValue = nil
             self.isHovered = hovered
-            self.isHoverContentVisible = hovered
             NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
         }
     }
@@ -226,7 +224,6 @@ final class NotchModel: ObservableObject {
         pendingHoverValue = nil
         hoverSuppressedUntil = Date().addingTimeInterval(0.8)
         isHovered = false
-        isHoverContentVisible = false
         completionMessage = nil
         completedTask = nil
         NotificationCenter.default.post(name: .notchSizeChanged, object: nil)

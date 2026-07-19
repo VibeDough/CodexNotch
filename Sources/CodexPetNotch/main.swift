@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func installPanel() {
         let root = NotchView(model: model)
         let hostingView = NSHostingView(rootView: root)
-        let initialSize = notchSize(expanded: false)
+        let initialSize = panelSize(expanded: false)
         hostingView.frame = NSRect(origin: .zero, size: initialSize)
         hostingView.autoresizingMask = [.width, .height]
 
@@ -106,7 +106,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             model.setHovered(false)
             return
         }
-        let hitArea = panel.frame.insetBy(dx: -10, dy: -8)
+        let visibleSize = notchSize(expanded: model.isExpanded)
+        let visibleFrame = NSRect(
+            x: panel.frame.midX - visibleSize.width / 2,
+            y: panel.frame.maxY - visibleSize.height,
+            width: visibleSize.width,
+            height: visibleSize.height
+        )
+        let hitArea = visibleFrame.insetBy(dx: -10, dy: -8)
         model.setHovered(hitArea.contains(NSEvent.mouseLocation))
     }
 
@@ -128,7 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func position(_ panel: NSPanel, on screen: NSScreen) {
-        let size = notchSize(expanded: model.isExpanded, on: screen)
+        let size = panelSize(expanded: model.isExpanded, on: screen)
         let topInset: CGFloat = screen.safeAreaInsets.top <= 0 ? 4 : 0
         panel.setFrame(NSRect(
             x: screen.frame.midX - size.width / 2,
@@ -162,9 +169,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return NSSize(width: 310, height: 38)
     }
 
+    private func panelSize(expanded: Bool, on screen: NSScreen? = nil) -> NSSize {
+        guard let screen = screen ?? preferences.targetScreen() else {
+            return NSSize(width: 450, height: 112)
+        }
+        let usesHoverCanvas = screen.safeAreaInsets.top > 0
+            && !expanded
+            && !model.isShowingSettings
+            && model.waitingTask == nil
+            && model.visibleCompletionMessage == nil
+            && model.activeTasks.isEmpty
+        return usesHoverCanvas
+            ? NSSize(width: 450, height: 112)
+            : notchSize(expanded: expanded, on: screen)
+    }
+
     private func resizeForCurrentState() {
         guard let panel, let screen = preferences.targetScreen() else { return }
-        let newSize = notchSize(expanded: model.isExpanded, on: screen)
+        let newSize = panelSize(expanded: model.isExpanded, on: screen)
         let topInset: CGFloat = screen.safeAreaInsets.top <= 0 ? 4 : 0
         let frame = NSRect(
             x: screen.frame.midX - newSize.width / 2,
@@ -190,7 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func applyCurrentFrame() {
         guard let panel, let screen = preferences.targetScreen() else { return }
-        let size = notchSize(expanded: model.isExpanded, on: screen)
+        let size = panelSize(expanded: model.isExpanded, on: screen)
         let topInset: CGFloat = screen.safeAreaInsets.top <= 0 ? 4 : 0
         panel.setFrame(NSRect(
             x: screen.frame.midX - size.width / 2,

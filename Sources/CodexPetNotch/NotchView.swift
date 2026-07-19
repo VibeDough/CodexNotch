@@ -10,7 +10,7 @@ struct NotchView: View {
     }
 
     private var showsUsageDetails: Bool {
-        model.isHoverContentVisible && model.activeTasks.isEmpty
+        model.isHovered && model.activeTasks.isEmpty
     }
 
     private var showsDetails: Bool {
@@ -32,8 +32,10 @@ struct NotchView: View {
                 taskDetails
             } else if let task = model.primaryTask {
                 persistentTaskStatus(task)
-            } else if showsUsageDetails {
+            } else if model.activeTasks.isEmpty,
+                      model.visibleCompletionMessage == nil {
                 tokenDetails
+                    .opacity(showsUsageDetails ? 1 : 0)
                     .transition(.opacity)
             } else if let message = model.visibleCompletionMessage {
                 completionBubble(message)
@@ -50,7 +52,7 @@ struct NotchView: View {
                     .transition(.scale(scale: 0.92, anchor: .top).combined(with: .opacity))
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(width: visualSize.width, height: visualSize.height, alignment: .top)
         .ignoresSafeArea(.all)
         .background {
             if model.usesCompactBar && !showsDetails && !model.isExpanded {
@@ -73,13 +75,32 @@ struct NotchView: View {
         .overlay { edgeStatusGlow }
         .animation(.spring(response: 0.34, dampingFraction: 0.72), value: model.completionMessage)
         .animation(.spring(response: 0.3, dampingFraction: 0.82), value: model.isExpanded)
-        .animation(.easeOut(duration: 0.12), value: showsUsageDetails)
+        .animation(.smooth(duration: 0.2), value: model.isHovered)
         .onChange(of: model.isDropTargeted) { _, targeted in
             model.setDropTargeted(targeted)
         }
         .onDrop(of: [UTType.fileURL, UTType.url, UTType.utf8PlainText], isTargeted: $model.isDropTargeted) {
             model.receive(providers: $0)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var visualSize: CGSize {
+        if model.isExpanded { return CGSize(width: 450, height: 126) }
+        if model.isShowingSettings { return CGSize(width: 450, height: 138) }
+        if model.waitingTask != nil { return CGSize(width: 450, height: 94) }
+        if model.visibleCompletionMessage != nil, model.completedTask != nil {
+            return CGSize(width: 450, height: 86)
+        }
+        if model.isTaskStatusPinned, model.activeTasks.count > 1 {
+            return CGSize(width: 450, height: 80 + CGFloat(model.activeTasks.count * 40))
+        }
+        if model.primaryTask != nil { return CGSize(width: 450, height: 86) }
+        if model.isHovered { return CGSize(width: 450, height: 112) }
+        if model.usesCompactBar {
+            return CGSize(width: 270, height: model.visibleCompletionMessage == nil ? 36 : 80)
+        }
+        return CGSize(width: 310, height: 38)
     }
 
     private var collapsedBar: some View {
