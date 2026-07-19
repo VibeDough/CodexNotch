@@ -834,9 +834,9 @@ private struct EdgeGlowBorder: View {
                 Capsule()
                     .stroke(.white.opacity(animated ? 0.07 : 0), lineWidth: 1)
                 Capsule()
-                    .stroke(style, lineWidth: 18)
+                    .stroke(style, lineWidth: 3)
                     .blur(radius: 9)
-                    .opacity(0.16)
+                    .opacity(0.42)
                 Capsule()
                     .stroke(style, lineWidth: 8)
                     .blur(radius: 3)
@@ -855,10 +855,10 @@ private struct EdgeGlowBorder: View {
                 IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
                     .stroke(
                         style,
-                        style: StrokeStyle(lineWidth: 18, lineCap: .round, lineJoin: .round)
+                        style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
                     )
                     .blur(radius: 9)
-                    .opacity(0.16)
+                    .opacity(0.42)
                     .mask { EdgeBodyMask(tipHeight: 18).fill(.white) }
 
                 IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
