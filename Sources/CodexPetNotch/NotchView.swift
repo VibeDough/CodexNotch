@@ -708,9 +708,14 @@ private struct IslandEdgeShape: Shape {
     let bottomRadius: CGFloat
 
     func path(in rect: CGRect) -> Path {
-        let s = min(shoulder, rect.width / 5)
-        let bottomY = rect.maxY - 1.4
-        let r = min(bottomRadius, (bottomY - rect.minY) / 2)
+        let edgeInset: CGFloat = 1.4
+        let s = min(shoulder, rect.width / 5) + edgeInset
+        let rightX = rect.maxX - s
+        let bottomY = rect.maxY - edgeInset
+        let r = min(
+            max(0, bottomRadius - edgeInset),
+            (bottomY - rect.minY) / 2
+        )
         var path = Path()
         path.move(to: CGPoint(x: rect.minX + s, y: rect.minY))
         path.addLine(to: CGPoint(x: rect.minX + s, y: bottomY - r))
@@ -718,12 +723,12 @@ private struct IslandEdgeShape: Shape {
             to: CGPoint(x: rect.minX + s + r, y: bottomY),
             control: CGPoint(x: rect.minX + s, y: bottomY)
         )
-        path.addLine(to: CGPoint(x: rect.maxX - s - r, y: bottomY))
+        path.addLine(to: CGPoint(x: rightX - r, y: bottomY))
         path.addQuadCurve(
-            to: CGPoint(x: rect.maxX - s, y: bottomY - r),
-            control: CGPoint(x: rect.maxX - s, y: bottomY)
+            to: CGPoint(x: rightX, y: bottomY - r),
+            control: CGPoint(x: rightX, y: bottomY)
         )
-        path.addLine(to: CGPoint(x: rect.maxX - s, y: rect.minY))
+        path.addLine(to: CGPoint(x: rightX, y: rect.minY))
         return path
     }
 }
