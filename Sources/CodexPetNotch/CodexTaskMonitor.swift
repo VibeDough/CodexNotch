@@ -34,6 +34,7 @@ struct CodexUsageLimit: Equatable {
 struct CodexTaskItem: Identifiable, Equatable {
     let id: String
     let title: String
+    let detail: String
     let project: String
     let model: String
     let effort: String
@@ -58,6 +59,11 @@ private struct UsageCacheEntry {
     let limitDate: Date
 }
 
+private struct ThreadMetadata {
+    let title: String
+    let description: String
+}
+
 final class CodexTaskMonitor: @unchecked Sendable {
     private let sessionsURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".codex/sessions", isDirectory: true)
@@ -74,12 +80,13 @@ final class CodexTaskMonitor: @unchecked Sendable {
     private var cachedPetStackItemCount: Int?
     private var cachedPetStackUpdatedAt: Date?
     private var cachedViewedThread: CodexViewedThread?
+    private var threadMetadata: [String: ThreadMetadata] = [:]
 
     func latestSnapshot() -> CodexStatusSnapshot {
+        let desktopState = latestDesktopState()
         let observedRollouts = newestRollouts().compactMap(cachedActivity(for:))
         let rollouts = reconciledRollouts(observedRollouts)
         let usageStats = todayUsageStats()
-        let desktopState = latestDesktopState()
         let activePhases: [CodexActivity.Phase] = [.running, .review, .waiting]
         let tasks = rollouts.filter { activePhases.contains($0.activity.phase) }.map(\.task)
         if let completion = rollouts.first(where: {
@@ -112,6 +119,9 @@ final class CodexTaskMonitor: @unchecked Sendable {
         try? handle.seek(toOffset: desktopLogOffset)
         let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
         desktopLogOffset = length
+        for line in text.split(separator: "\n") {
+            ingestThreadMetadata(from: String(line))
+        }
         let petStackPattern = #"Native pet composition preparation sent .*activityStackItemCount=([0-9]+).*id=mascot-badge"#
         let viewedPattern = #"thread_stream_view_activity_changed active=true conversationId=([0-9a-f-]+).*rendererWindowFocused=true"#
         guard let petStackExpression = try? NSRegularExpression(pattern: petStackPattern),
@@ -144,6 +154,28 @@ final class CodexTaskMonitor: @unchecked Sendable {
             if foundPetStack, foundViewedThread { break }
         }
         return (cachedViewedThread, cachedPetStackItemCount, cachedPetStackUpdatedAt)
+    }
+
+    private func ingestThreadMetadata(from line: String) {
+        guard line.contains("schemaVersion"), line.contains("threads"),
+              let responseRange = line.range(of: " response="),
+              let responseData = String(line[responseRange.upperBound...]).data(using: .utf8),
+              let response = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+              let contentItems = response["contentItems"] as? [[String: Any]] else { return }
+        for item in contentItems {
+            guard let text = item["text"] as? String,
+                  let data = text.data(using: .utf8),
+                  let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let threads = payload["threads"] as? [[String: Any]] else { continue }
+            for thread in threads {
+                guard let id = thread["id"] as? String,
+                      let title = thread["title"] as? String else { continue }
+                let description = (thread["description"] as? String)
+                    ?? (thread["preview"] as? String)
+                    ?? ""
+                threadMetadata[id] = ThreadMetadata(title: title, description: description)
+            }
+        }
     }
 
     private func desktopLogURL() -> URL? {
@@ -354,7 +386,12 @@ final class CodexTaskMonitor: @unchecked Sendable {
         )
         let task = CodexTaskItem(
             id: sessionID,
-            title: Self.taskTitle(lastUserMessage) ?? project,
+            title: threadMetadata[sessionID].map { Self.shortText($0.title, limit: 24) }
+                ?? Self.taskTitle(lastUserMessage)
+                ?? project,
+            detail: threadMetadata[sessionID].map { Self.shortText($0.description, limit: 38) }
+                ?? Self.taskTitle(lastUserMessage)
+                ?? project,
             project: project,
             model: model,
             effort: effort,
@@ -372,6 +409,11 @@ final class CodexTaskMonitor: @unchecked Sendable {
         let line = text.split(separator: "\n").first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         guard let line else { return nil }
         return line.count > 24 ? String(line.prefix(24)) + "…" : String(line)
+    }
+
+    private static func shortText(_ text: String, limit: Int) -> String {
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return clean.count > limit ? String(clean.prefix(limit)) + "…" : clean
     }
 
     private static func parseDate(_ value: String) -> Date? {

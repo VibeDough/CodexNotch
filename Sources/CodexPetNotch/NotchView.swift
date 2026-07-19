@@ -194,8 +194,6 @@ struct NotchView: View {
                 model.toggleTaskStatusPinned()
             } else if let task = model.primaryTask {
                 model.openTask(task)
-            } else {
-                model.toggleExpanded()
             }
         }
         .overlay {
@@ -321,9 +319,10 @@ struct NotchView: View {
                                 .font(.system(size: 10.5, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
-                            Text("\(phaseText(task.phase)) · \(elapsedText(task.startedAt))")
-                                .font(.system(size: 9, design: .monospaced))
+                            Text(task.detail)
+                                .font(.system(size: 9))
                                 .foregroundStyle(.white.opacity(0.5))
+                                .lineLimit(1)
                         }
 
                         Spacer(minLength: 8)
@@ -504,9 +503,10 @@ struct NotchView: View {
                         .font(.system(size: 10.5, weight: .bold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
-                    Text("\(phaseText(task.phase)) · \(elapsedText(task.startedAt))")
-                        .font(.system(size: 9, design: .monospaced))
+                    Text(task.detail)
+                        .font(.system(size: 9))
                         .foregroundStyle(.white.opacity(0.5))
+                        .lineLimit(1)
                 }
                 Spacer(minLength: 6)
                 if model.activeTaskCount > 1 {
