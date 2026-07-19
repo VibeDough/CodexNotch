@@ -117,6 +117,7 @@ struct NotchView: View {
                         Text(model.activeTasks.isEmpty ? "用量" : "任务")
                     } else {
                         Text(model.remainingUsageText)
+                            .font(.system(size: 13, weight: .black, design: .rounded))
                     }
                 }
                 .font(.system(size: 10.5, weight: .bold, design: .rounded))
@@ -767,9 +768,9 @@ private struct EdgeGlowBorder: View {
                         style,
                         style: StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round)
                     )
-                    .mask { EdgeBodyMask(tipHeight: 14).fill(.white) }
+                    .mask { EdgeBodyMask(tipHeight: 8).fill(.white) }
 
-                EdgeTaperTips(tipHeight: 14, baseWidth: 2.7)
+                EdgeTaperTips(tipHeight: 8, baseWidth: 2.7)
                     .fill(style)
             }
             .shadow(color: color.opacity(0.65), radius: 2.8)
