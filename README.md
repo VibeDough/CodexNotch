@@ -1,4 +1,4 @@
-# 49labs Assistant Notch
+# 49agent Notch
 
 一个在 MacBook 刘海区域展示 Codex 任务、用量和连接状态的轻量 macOS 应用。
 
@@ -19,7 +19,7 @@
 ```sh
 cd CodexPetNotch
 sh build-app.sh
-open "dist/49labs Assistant Notch.app"
+open "dist/49agent Notch.app"
 ```
 
 应用只在本机读取 `~/.codex/sessions/` 中的会话状态，不上传会话内容或用量数据。

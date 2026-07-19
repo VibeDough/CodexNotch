@@ -4,7 +4,6 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var panel: NotchPanel?
-    private var glowPanels: [NSPanel] = []
     private var environmentTimer: Timer?
     private var hoverTimer: Timer?
     private let model = NotchModel()
@@ -13,7 +12,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         installPanel()
-        installGlowPanels()
 
         NotificationCenter.default.addObserver(
             forName: .notchSizeChanged,
@@ -76,30 +74,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.panel = panel
     }
 
-    private func installGlowPanels() {
-        glowPanels = [true, false].map { pointsLeft in
-            let hostingView = NSHostingView(rootView: NotchGlowWing(
-                model: model,
-                pointsOutwardToLeft: pointsLeft
-            ))
-            hostingView.frame = NSRect(x: 0, y: 0, width: 42, height: 6)
-            let wing = NSPanel(
-                contentRect: hostingView.frame,
-                styleMask: [.borderless, .nonactivatingPanel],
-                backing: .buffered,
-                defer: false
-            )
-            wing.contentView = hostingView
-            wing.isOpaque = false
-            wing.backgroundColor = .clear
-            wing.hasShadow = false
-            wing.ignoresMouseEvents = true
-            wing.level = .statusBar
-            wing.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-            return wing
-        }
-    }
-
     private func refreshPresentation(reposition: Bool) {
         guard let panel, let screen = preferences.targetScreen() else { return }
         model.setCompactBar(screen.safeAreaInsets.top <= 0)
@@ -114,26 +88,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         if hiddenByConflict || hiddenByFullscreen {
             panel.orderOut(nil)
-            glowPanels.forEach { $0.orderOut(nil) }
         } else {
             if reposition || !panel.isVisible {
                 position(panel, on: screen)
             }
             panel.orderFrontRegardless()
-            positionGlowPanels(on: screen)
-            glowPanels.forEach { $0.orderFrontRegardless() }
         }
-    }
-
-    private func positionGlowPanels(on screen: NSScreen) {
-        guard glowPanels.count == 2 else { return }
-        let bodyWidth: CGFloat = 450
-        let wingWidth: CGFloat = 42
-        let bodyLeft = screen.frame.midX - bodyWidth / 2
-        let y = screen.frame.maxY - 6
-        let overlap: CGFloat = 0.5
-        glowPanels[0].setFrame(NSRect(x: bodyLeft - wingWidth + overlap, y: y, width: wingWidth, height: 6), display: true)
-        glowPanels[1].setFrame(NSRect(x: bodyLeft + bodyWidth - overlap, y: y, width: wingWidth, height: 6), display: true)
     }
 
     private func refreshPointerHover() {

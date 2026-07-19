@@ -555,65 +555,6 @@ struct NotchView: View {
     }
 }
 
-struct NotchGlowWing: View {
-    @ObservedObject var model: NotchModel
-    let pointsOutwardToLeft: Bool
-
-    var body: some View {
-        if model.activeTaskCount > 0 || model.connectionState != .connected {
-            TimelineView(.animation(minimumInterval: 1.0 / 24.0)) { timeline in
-                let hue = timeline.date.timeIntervalSinceReferenceDate
-                    .truncatingRemainder(dividingBy: 2.8) / 2.8
-                let liveColor = model.connectionState == .disconnected
-                    ? Color.red
-                    : Color(hue: hue, saturation: 0.82, brightness: 1)
-                WingTaperShape(pointsOutwardToLeft: pointsOutwardToLeft)
-                    .fill(
-                        LinearGradient(
-                            stops: pointsOutwardToLeft
-                                ? [
-                                    .init(color: .clear, location: 0),
-                                    .init(color: .clear, location: 0.2),
-                                    .init(color: liveColor.opacity(0.18), location: 0.58),
-                                    .init(color: liveColor.opacity(0.78), location: 1)
-                                ]
-                                : [
-                                    .init(color: liveColor.opacity(0.78), location: 0),
-                                    .init(color: liveColor.opacity(0.18), location: 0.42),
-                                    .init(color: .clear, location: 0.8),
-                                    .init(color: .clear, location: 1)
-                                ],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .shadow(color: liveColor.opacity(0.42), radius: 1.6)
-                .frame(height: 3.2)
-                .frame(maxHeight: .infinity, alignment: .top)
-            }
-        }
-    }
-}
-
-private struct WingTaperShape: Shape {
-    let pointsOutwardToLeft: Bool
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        if pointsOutwardToLeft {
-            path.move(to: CGPoint(x: rect.minX, y: rect.midY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        } else {
-            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        }
-        path.closeSubpath()
-        return path
-    }
-}
-
 private struct NotchSettingsContent: View {
     @AppStorage("coexistenceMode") private var coexistenceMode = CoexistenceMode.automatic.rawValue
     @AppStorage("screenNumber") private var screenNumber = -1
@@ -731,6 +672,7 @@ private struct EdgeGlowBorder: View {
             Capsule()
                 .stroke(style, lineWidth: 2.7)
                 .shadow(color: color.opacity(0.65), radius: 2.8)
+                .padding(1.4)
         } else {
             IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
                 .stroke(
@@ -738,6 +680,7 @@ private struct EdgeGlowBorder: View {
                     style: StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round)
                 )
                 .shadow(color: color.opacity(0.65), radius: 2.8)
+                .padding(1.4)
         }
     }
 }
