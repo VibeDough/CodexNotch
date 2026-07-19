@@ -117,7 +117,6 @@ struct NotchView: View {
             .buttonStyle(.plain)
             .help("打开 Codex")
             .scaleEffect(x: usesSmallIdleLayout ? 0.84 : 1, y: 1, anchor: .leading)
-            .offset(x: usesSmallIdleLayout ? -7 : 0)
 
             Spacer(minLength: 92)
 
