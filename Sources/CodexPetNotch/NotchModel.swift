@@ -130,6 +130,17 @@ final class NotchModel: ObservableObject {
         NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
     }
 
+    func cancelPendingDrop() {
+        dropExitTask?.cancel()
+        pendingDropPrompt = nil
+        latestDrop = "拖入文件、网址或文字"
+        isDropTargeted = false
+        expandedForDrop = false
+        isExpanded = false
+        if activeTasks.isEmpty { state = .idle }
+        NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
+    }
+
     var taskRuntimeText: String? {
         guard let startedAt = lastActivity.startedAt,
               [.running, .review, .waiting].contains(lastActivity.phase) else { return nil }
@@ -229,7 +240,7 @@ final class NotchModel: ObservableObject {
         case .idle: CGSize(width: 310, height: 38)
         case .compactIdle: CGSize(width: 270, height: 36)
         case .usage: CGSize(width: 450, height: 112)
-        case .drop: CGSize(width: 450, height: 126)
+        case .drop: CGSize(width: 450, height: 138)
         case .settings: CGSize(width: 450, height: 138)
         case .task: CGSize(width: 450, height: 86)
         case let .taskList(count): CGSize(width: 450, height: 80 + CGFloat(count * 40))

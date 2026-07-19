@@ -74,7 +74,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.hidesOnDeactivate = false
         panel.delegate = self
-        panel.onEscape = { [weak self] in self?.model.collapse() }
+        panel.onEscape = { [weak self] in
+            guard let self else { return }
+            if self.model.pendingDropPrompt != nil {
+                self.model.cancelPendingDrop()
+            } else {
+                self.model.collapse()
+            }
+        }
         self.hostingView = hostingView
         self.panel = panel
     }

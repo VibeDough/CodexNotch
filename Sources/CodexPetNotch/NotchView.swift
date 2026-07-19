@@ -596,23 +596,35 @@ struct NotchView: View {
                     .foregroundStyle(.white.opacity(0.82))
                     .lineLimit(1)
                 Spacer()
-                Button(action: model.collapse) {
-                    Image(systemName: "chevron.up")
+                Button {
+                    if model.pendingDropPrompt == nil {
+                        model.collapse()
+                    } else {
+                        model.cancelPendingDrop()
+                    }
+                } label: {
+                    Image(systemName: model.pendingDropPrompt == nil ? "chevron.up" : "xmark")
                         .foregroundStyle(.white.opacity(0.7))
                         .frame(width: 28, height: 24)
                 }
                 .buttonStyle(.plain)
+                .help(model.pendingDropPrompt == nil ? "收起" : "取消")
             }
 
             if model.pendingDropPrompt != nil {
                 Button(action: model.startNewConversationFromDrop) {
-                    HStack(spacing: 7) {
-                        Image(systemName: "plus.message.fill")
-                        Text("在 Codex 新建对话")
+                    VStack(spacing: 2) {
+                        HStack(spacing: 7) {
+                            Image(systemName: "plus.message.fill")
+                            Text("在 Codex 新建对话")
+                        }
+                        Text("拖入其他内容可替换")
+                            .font(.system(size: 8.5, weight: .semibold))
+                            .foregroundStyle(.black.opacity(0.48))
                     }
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(.black)
-                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .frame(maxWidth: .infinity, minHeight: 44)
                     .background(.white, in: RoundedRectangle(cornerRadius: 12))
                 }
                 .buttonStyle(.plain)
