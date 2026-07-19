@@ -84,6 +84,7 @@ struct NotchView: View {
         .overlay { edgeStatusGlow }
         .animation(.smooth(duration: 0.22), value: model.presentationMode)
         .animation(.smooth(duration: 0.22), value: model.completedTask?.id)
+        .animation(.smooth(duration: 0.22), value: model.connectionState)
         .onChange(of: model.isDropTargeted) { _, targeted in
             model.setDropTargeted(targeted)
         }
@@ -104,6 +105,9 @@ struct NotchView: View {
                     if model.connectionState == .disconnected {
                         Image(systemName: "link.slash")
                         Text("断开")
+                    } else if model.connectionState == .reconnecting {
+                        Image(systemName: "wifi.exclamationmark")
+                        Text("正在重连")
                     } else if model.connectionState == .reconnected {
                         Image(systemName: "arrow.triangle.2.circlepath")
                         Text("已重连")
@@ -228,7 +232,7 @@ struct NotchView: View {
 
     @ViewBuilder
     private var edgeStatusGlow: some View {
-        if model.connectionState == .disconnected {
+        if model.connectionState == .disconnected || model.connectionState == .reconnecting {
             EdgeGlowBorder(compact: model.usesCompactBar, expanded: showsDetails || model.primaryTask != nil, animated: false, color: .red)
         } else if model.activeTaskCount > 0 || model.connectionState == .reconnected {
             EdgeGlowBorder(compact: model.usesCompactBar, expanded: showsDetails || model.primaryTask != nil, animated: true, color: .cyan)
@@ -254,6 +258,7 @@ struct NotchView: View {
     }
 
     private var currentStatusText: String {
+        if model.connectionState == .reconnecting { return "正在重连" }
         guard model.activeTaskCount > 0 else { return "空闲" }
         return switch currentActivePhase {
         case .waiting: "等待"
@@ -264,7 +269,7 @@ struct NotchView: View {
     }
 
     private var currentStatusColor: Color {
-        if model.connectionState == .disconnected { return .red }
+        if model.connectionState == .disconnected || model.connectionState == .reconnecting { return .red }
         if model.connectionState == .reconnected { return .cyan }
         guard model.activeTaskCount > 0 else { return .white.opacity(0.3) }
         return switch currentActivePhase {
@@ -415,6 +420,7 @@ struct NotchView: View {
     }
 
     private func phaseText(_ phase: CodexActivity.Phase) -> String {
+        if model.connectionState == .reconnecting { return "正在重连" }
         return switch phase {
         case .running: "运行中"
         case .review: "分析中"
@@ -426,7 +432,7 @@ struct NotchView: View {
     }
 
     private func statusColor(_ phase: CodexActivity.Phase) -> Color {
-        if model.connectionState == .disconnected { return .red }
+        if model.connectionState == .disconnected || model.connectionState == .reconnecting { return .red }
         if model.connectionState == .reconnected { return .cyan }
         return switch phase {
         case .waiting: .orange

@@ -1,15 +1,17 @@
 import AppKit
 import Combine
 import Foundation
+import Network
 import UniformTypeIdentifiers
 
 extension Notification.Name {
     static let notchSizeChanged = Notification.Name("CodexPetNotch.sizeChanged")
 }
 
-enum CodexConnectionState {
+enum CodexConnectionState: Equatable {
     case connected
     case disconnected
+    case reconnecting
     case reconnected
 }
 
@@ -77,6 +79,8 @@ final class NotchModel: ObservableObject {
     private var acknowledgedCompletionKeys: Set<String> = []
     private var reconnectTask: Task<Void, Never>?
     private var wasCodexConnected: Bool?
+    private let networkMonitor = NWPathMonitor()
+    private var networkAvailable = true
     private let taskMonitor = CodexTaskMonitor()
     private let codexStartedAt = NSRunningApplication
         .runningApplications(withBundleIdentifier: "com.openai.codex")
@@ -89,6 +93,7 @@ final class NotchModel: ObservableObject {
     private var lastActivity = CodexActivity(phase: .idle, label: "Codex 空闲", eventDate: .distantPast, startedAt: nil)
 
     init() {
+        startNetworkMonitor()
         startClock()
         startActivityMonitor()
     }
@@ -471,14 +476,21 @@ final class NotchModel: ObservableObject {
             withBundleIdentifier: "com.openai.codex"
         ).isEmpty
         defer { wasCodexConnected = connected }
-        guard let wasCodexConnected else {
-            connectionState = connected ? .connected : .disconnected
-            return
-        }
-        if !connected {
+        guard connected else {
             reconnectTask?.cancel()
             connectionState = .disconnected
-        } else if !wasCodexConnected {
+            return
+        }
+        guard networkAvailable else {
+            reconnectTask?.cancel()
+            connectionState = .reconnecting
+            return
+        }
+        guard let wasCodexConnected else {
+            connectionState = .connected
+            return
+        }
+        if connectionState == .reconnecting || !wasCodexConnected {
             connectionState = .reconnected
             reconnectTask?.cancel()
             reconnectTask = Task { @MainActor [weak self] in
@@ -487,6 +499,17 @@ final class NotchModel: ObservableObject {
                 self?.connectionState = .connected
             }
         }
+    }
+
+    private func startNetworkMonitor() {
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.networkAvailable = path.status == .satisfied
+                self.refreshConnectionState()
+            }
+        }
+        networkMonitor.start(queue: DispatchQueue(label: "49agent.network-monitor"))
     }
 
     private func showCompletion(_ message: String) {
