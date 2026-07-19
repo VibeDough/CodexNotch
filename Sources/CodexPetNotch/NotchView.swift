@@ -116,7 +116,7 @@ struct NotchView: View {
                     } else if model.isHovered {
                         Text(model.activeTasks.isEmpty ? "用量" : "任务")
                     } else {
-                        Text("剩余 \(model.remainingUsageText)")
+                        Text(model.remainingUsageText)
                     }
                 }
                 .font(.system(size: 10.5, weight: .bold, design: .rounded))
