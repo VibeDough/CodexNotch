@@ -15,14 +15,8 @@ struct CodexStatusSnapshot {
     let todayTokens: Int
     let usageLimit: CodexUsageLimit?
     let completedTask: CodexTaskItem?
-    let viewedThread: CodexViewedThread?
-    let unreadThreadIDs: Set<String>?
-    let unreadUpdatedAt: Date?
-}
-
-struct CodexViewedThread {
-    let id: String
-    let viewedAt: Date
+    let petStackItemCount: Int?
+    let petStackUpdatedAt: Date?
 }
 
 struct CodexUsageLimit: Equatable {
@@ -71,9 +65,8 @@ final class CodexTaskMonitor: @unchecked Sendable {
     private var desktopLogDiscoveryDate = Date.distantPast
     private var desktopStateLogURL: URL?
     private var desktopLogOffset: UInt64 = 0
-    private var cachedViewedThread: CodexViewedThread?
-    private var cachedUnreadThreadIDs: Set<String>?
-    private var cachedUnreadUpdatedAt: Date?
+    private var cachedPetStackItemCount: Int?
+    private var cachedPetStackUpdatedAt: Date?
 
     func latestSnapshot() -> CodexStatusSnapshot {
         let observedRollouts = newestRollouts().compactMap(cachedActivity(for:))
@@ -85,76 +78,50 @@ final class CodexTaskMonitor: @unchecked Sendable {
         if let completion = rollouts.first(where: {
             $0.activity.phase == .completed && Date().timeIntervalSince($0.activity.eventDate) < 8
         }) {
-            return CodexStatusSnapshot(primary: completion.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: completion.task, viewedThread: desktopState.viewedThread, unreadThreadIDs: desktopState.unreadThreadIDs, unreadUpdatedAt: desktopState.unreadUpdatedAt)
+            return CodexStatusSnapshot(primary: completion.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: completion.task, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
         }
         if let active = rollouts.first(where: { [.running, .review, .waiting, .failed].contains($0.activity.phase) }) {
-            return CodexStatusSnapshot(primary: active.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, unreadThreadIDs: desktopState.unreadThreadIDs, unreadUpdatedAt: desktopState.unreadUpdatedAt)
+            return CodexStatusSnapshot(primary: active.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
         }
         let idle = CodexActivity(phase: .idle, label: "Codex 空闲", eventDate: .distantPast, startedAt: nil)
-        return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, unreadThreadIDs: desktopState.unreadThreadIDs, unreadUpdatedAt: desktopState.unreadUpdatedAt)
+        return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
     }
 
-    private func latestDesktopState() -> (viewedThread: CodexViewedThread?, unreadThreadIDs: Set<String>?, unreadUpdatedAt: Date?) {
+    private func latestDesktopState() -> (itemCount: Int?, updatedAt: Date?) {
         guard let logURL = desktopLogURL(),
-              let handle = try? FileHandle(forReadingFrom: logURL) else { return (nil, nil, nil) }
+              let handle = try? FileHandle(forReadingFrom: logURL) else { return (nil, nil) }
         defer { try? handle.close() }
         let length = (try? handle.seekToEnd()) ?? 0
         if desktopStateLogURL != logURL || length < desktopLogOffset {
             desktopStateLogURL = logURL
-            desktopLogOffset = length > 1_000_000 ? length - 1_000_000 : 0
-            cachedViewedThread = nil
-            cachedUnreadThreadIDs = nil
-            cachedUnreadUpdatedAt = nil
+            desktopLogOffset = length > 8_000_000 ? length - 8_000_000 : 0
+            cachedPetStackItemCount = nil
+            cachedPetStackUpdatedAt = nil
         }
         guard length > desktopLogOffset else {
-            return (cachedViewedThread, cachedUnreadThreadIDs, cachedUnreadUpdatedAt)
+            return (cachedPetStackItemCount, cachedPetStackUpdatedAt)
         }
         try? handle.seek(toOffset: desktopLogOffset)
         let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
         desktopLogOffset = length
-        let viewedPattern = #"thread_stream_view_activity_changed active=true conversationId=([0-9a-f-]+).*rendererWindowFocused=true"#
-        let unreadPattern = #"\"id\":\"([0-9a-f-]+)\".*?\"hasUnreadTurn\":(true|false)"#
-        guard let viewedExpression = try? NSRegularExpression(pattern: viewedPattern),
-              let unreadExpression = try? NSRegularExpression(pattern: unreadPattern) else {
-            return (nil, nil, nil)
+        let petStackPattern = #"Native pet composition preparation sent .*activityStackItemCount=([0-9]+).*id=mascot-badge"#
+        guard let petStackExpression = try? NSRegularExpression(pattern: petStackPattern) else {
+            return (nil, nil)
         }
-        var viewedThread = cachedViewedThread
-        var unreadThreadIDs = cachedUnreadThreadIDs
-        var unreadUpdatedAt = cachedUnreadUpdatedAt
-        var foundViewedThread = false
-        var foundUnreadState = false
         for line in text.split(separator: "\n").reversed() {
             let value = String(line)
             let range = NSRange(value.startIndex..., in: value)
-            if !foundViewedThread,
-               let match = viewedExpression.firstMatch(in: value, range: range),
-               let idRange = Range(match.range(at: 1), in: value),
-               let timestamp = value.split(separator: " ", maxSplits: 1).first,
-               let viewedAt = Self.parseDate(String(timestamp)) {
-                viewedThread = CodexViewedThread(id: String(value[idRange]), viewedAt: viewedAt)
-                foundViewedThread = true
-            }
-            if !foundUnreadState, value.contains("hasUnreadTurn"),
+            if let match = petStackExpression.firstMatch(in: value, range: range),
+               let countRange = Range(match.range(at: 1), in: value),
+               let count = Int(value[countRange]),
                let timestamp = value.split(separator: " ", maxSplits: 1).first,
                let updatedAt = Self.parseDate(String(timestamp)) {
-                let decodedValue = value.replacingOccurrences(of: "\\\"", with: "\"")
-                let decodedRange = NSRange(decodedValue.startIndex..., in: decodedValue)
-                let matches = unreadExpression.matches(in: decodedValue, range: decodedRange)
-                unreadThreadIDs = Set(matches.compactMap { match in
-                    guard let stateRange = Range(match.range(at: 2), in: decodedValue),
-                          decodedValue[stateRange] == "true",
-                          let idRange = Range(match.range(at: 1), in: decodedValue) else { return nil }
-                    return String(decodedValue[idRange])
-                })
-                unreadUpdatedAt = updatedAt
-                foundUnreadState = true
+                cachedPetStackItemCount = count
+                cachedPetStackUpdatedAt = updatedAt
+                break
             }
-            if foundViewedThread, foundUnreadState { break }
         }
-        cachedViewedThread = viewedThread
-        cachedUnreadThreadIDs = unreadThreadIDs
-        cachedUnreadUpdatedAt = unreadUpdatedAt
-        return (viewedThread, unreadThreadIDs, unreadUpdatedAt)
+        return (cachedPetStackItemCount, cachedPetStackUpdatedAt)
     }
 
     private func desktopLogURL() -> URL? {
