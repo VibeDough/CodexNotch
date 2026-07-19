@@ -805,6 +805,7 @@ private struct EdgeGlowBorder: View {
             Capsule()
                 .stroke(style, lineWidth: 2.7)
                 .shadow(color: color.opacity(0.65), radius: 2.8)
+                .shadow(color: color.opacity(0.24), radius: 7)
                 .padding(1.4)
         } else {
             ZStack {
@@ -815,6 +816,7 @@ private struct EdgeGlowBorder: View {
                     )
                     .mask { EdgeBodyMask(tipHeight: 18).fill(.white) }
                     .shadow(color: color.opacity(0.65), radius: 2.8)
+                    .shadow(color: color.opacity(0.24), radius: 7)
 
                 EdgeTaperTips(tipHeight: 18, baseWidth: 3.2)
                     .fill(style)
