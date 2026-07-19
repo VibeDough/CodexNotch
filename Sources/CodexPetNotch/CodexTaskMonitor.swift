@@ -46,6 +46,18 @@ private struct MonitoredRollout {
     let task: CodexTaskItem
 }
 
+private struct ActivityCacheEntry {
+    let modifiedAt: Date
+    let rollout: MonitoredRollout?
+}
+
+private struct UsageCacheEntry {
+    let modifiedAt: Date
+    let tokens: Int
+    let limit: CodexUsageLimit?
+    let limitDate: Date
+}
+
 final class CodexTaskMonitor: @unchecked Sendable {
     private let sessionsURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".codex/sessions", isDirectory: true)
@@ -53,10 +65,18 @@ final class CodexTaskMonitor: @unchecked Sendable {
     private var cachedUsageLimit: CodexUsageLimit?
     private var tokenCacheDate = Date.distantPast
     private var pendingConfirmations: [String: MonitoredRollout] = [:]
+    private var activityCache: [URL: ActivityCacheEntry] = [:]
+    private var usageCache: [URL: UsageCacheEntry] = [:]
     private var cachedDesktopLogURL: URL?
+    private var desktopLogDiscoveryDate = Date.distantPast
+    private var desktopStateLogURL: URL?
+    private var desktopLogOffset: UInt64 = 0
+    private var cachedViewedThread: CodexViewedThread?
+    private var cachedUnreadThreadIDs: Set<String>?
+    private var cachedUnreadUpdatedAt: Date?
 
     func latestSnapshot() -> CodexStatusSnapshot {
-        let observedRollouts = newestRollouts().compactMap(activity(for:))
+        let observedRollouts = newestRollouts().compactMap(cachedActivity(for:))
         let rollouts = reconciledRollouts(observedRollouts)
         let usageStats = todayUsageStats()
         let desktopState = latestDesktopState()
@@ -79,29 +99,42 @@ final class CodexTaskMonitor: @unchecked Sendable {
               let handle = try? FileHandle(forReadingFrom: logURL) else { return (nil, nil, nil) }
         defer { try? handle.close() }
         let length = (try? handle.seekToEnd()) ?? 0
-        let sampleSize: UInt64 = 1_000_000
-        try? handle.seek(toOffset: length > sampleSize ? length - sampleSize : 0)
+        if desktopStateLogURL != logURL || length < desktopLogOffset {
+            desktopStateLogURL = logURL
+            desktopLogOffset = length > 1_000_000 ? length - 1_000_000 : 0
+            cachedViewedThread = nil
+            cachedUnreadThreadIDs = nil
+            cachedUnreadUpdatedAt = nil
+        }
+        guard length > desktopLogOffset else {
+            return (cachedViewedThread, cachedUnreadThreadIDs, cachedUnreadUpdatedAt)
+        }
+        try? handle.seek(toOffset: desktopLogOffset)
         let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
+        desktopLogOffset = length
         let viewedPattern = #"thread_stream_view_activity_changed active=true conversationId=([0-9a-f-]+).*rendererWindowFocused=true"#
         let unreadPattern = #"\"id\":\"([0-9a-f-]+)\".*?\"hasUnreadTurn\":(true|false)"#
         guard let viewedExpression = try? NSRegularExpression(pattern: viewedPattern),
               let unreadExpression = try? NSRegularExpression(pattern: unreadPattern) else {
             return (nil, nil, nil)
         }
-        var viewedThread: CodexViewedThread?
-        var unreadThreadIDs: Set<String>?
-        var unreadUpdatedAt: Date?
+        var viewedThread = cachedViewedThread
+        var unreadThreadIDs = cachedUnreadThreadIDs
+        var unreadUpdatedAt = cachedUnreadUpdatedAt
+        var foundViewedThread = false
+        var foundUnreadState = false
         for line in text.split(separator: "\n").reversed() {
             let value = String(line)
             let range = NSRange(value.startIndex..., in: value)
-            if viewedThread == nil,
+            if !foundViewedThread,
                let match = viewedExpression.firstMatch(in: value, range: range),
                let idRange = Range(match.range(at: 1), in: value),
                let timestamp = value.split(separator: " ", maxSplits: 1).first,
                let viewedAt = Self.parseDate(String(timestamp)) {
                 viewedThread = CodexViewedThread(id: String(value[idRange]), viewedAt: viewedAt)
+                foundViewedThread = true
             }
-            if unreadThreadIDs == nil, value.contains("hasUnreadTurn"),
+            if !foundUnreadState, value.contains("hasUnreadTurn"),
                let timestamp = value.split(separator: " ", maxSplits: 1).first,
                let updatedAt = Self.parseDate(String(timestamp)) {
                 let decodedValue = value.replacingOccurrences(of: "\\\"", with: "\"")
@@ -114,17 +147,23 @@ final class CodexTaskMonitor: @unchecked Sendable {
                     return String(decodedValue[idRange])
                 })
                 unreadUpdatedAt = updatedAt
+                foundUnreadState = true
             }
-            if viewedThread != nil, unreadThreadIDs != nil { break }
+            if foundViewedThread, foundUnreadState { break }
         }
+        cachedViewedThread = viewedThread
+        cachedUnreadThreadIDs = unreadThreadIDs
+        cachedUnreadUpdatedAt = unreadUpdatedAt
         return (viewedThread, unreadThreadIDs, unreadUpdatedAt)
     }
 
     private func desktopLogURL() -> URL? {
-        if let cachedDesktopLogURL,
+        if Date().timeIntervalSince(desktopLogDiscoveryDate) < 30,
+           let cachedDesktopLogURL,
            FileManager.default.fileExists(atPath: cachedDesktopLogURL.path) {
             return cachedDesktopLogURL
         }
+        desktopLogDiscoveryDate = Date()
         let logsURL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/com.openai.codex", isDirectory: true)
         guard let enumerator = FileManager.default.enumerator(
@@ -140,6 +179,22 @@ final class CodexTaskMonitor: @unchecked Sendable {
         }
         cachedDesktopLogURL = newest?.url
         return cachedDesktopLogURL
+    }
+
+    private func cachedActivity(for file: URL) -> MonitoredRollout? {
+        guard let modifiedAt = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate else {
+            return nil
+        }
+        if let cached = activityCache[file], cached.modifiedAt == modifiedAt {
+            return cached.rollout
+        }
+        let rollout = activity(for: file)
+        activityCache[file] = ActivityCacheEntry(modifiedAt: modifiedAt, rollout: rollout)
+        if activityCache.count > 24 {
+            let retained = Set(newestRollouts(limit: 16))
+            activityCache = activityCache.filter { retained.contains($0.key) }
+        }
+        return rollout
     }
 
     private func reconciledRollouts(_ observed: [MonitoredRollout]) -> [MonitoredRollout] {
@@ -172,47 +227,62 @@ final class CodexTaskMonitor: @unchecked Sendable {
         let calendar = Calendar.current
         var newestLimitDate = Date.distantPast
         var newestLimit: CodexUsageLimit?
-        cachedTodayTokens = newestRollouts(limit: 64).reduce(into: 0) { total, url in
+        let recentURLs = newestRollouts(limit: 64)
+        cachedTodayTokens = recentURLs.reduce(into: 0) { total, url in
             guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
                   let date = values.contentModificationDate,
-                  calendar.isDateInToday(date),
-                  let handle = try? FileHandle(forReadingFrom: url) else { return }
-            defer { try? handle.close() }
-
-            let length = (try? handle.seekToEnd()) ?? 0
-            let sampleSize: UInt64 = 750_000
-            try? handle.seek(toOffset: length > sampleSize ? length - sampleSize : 0)
-            let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
-            for line in text.split(separator: "\n").reversed() {
-                guard let data = line.data(using: .utf8),
-                      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let payload = object["payload"] as? [String: Any],
-                      payload["type"] as? String == "token_count",
-                      let info = payload["info"] as? [String: Any],
-                      let usage = info["total_token_usage"] as? [String: Any],
-                      let tokens = usage["total_tokens"] as? Int else { continue }
-                total += tokens
-                if let limits = payload["rate_limits"] as? [String: Any],
-                   let primary = limits["primary"] as? [String: Any],
-                   let used = (primary["used_percent"] as? NSNumber)?.doubleValue {
-                    let eventDate = (object["timestamp"] as? String).flatMap(Self.parseDate) ?? date
-                    let resetAt = (primary["resets_at"] as? NSNumber)
-                        .map { Date(timeIntervalSince1970: $0.doubleValue) }
-                    if eventDate > newestLimitDate {
-                        newestLimitDate = eventDate
-                        newestLimit = CodexUsageLimit(
-                            usedPercent: used,
-                            resetAt: resetAt,
-                            planType: limits["plan_type"] as? String
-                        )
-                    }
-                }
-                break
+                  calendar.isDateInToday(date) else { return }
+            let entry: UsageCacheEntry
+            if let cached = usageCache[url], cached.modifiedAt == date {
+                entry = cached
+            } else {
+                entry = readUsageEntry(from: url, modifiedAt: date)
+                usageCache[url] = entry
+            }
+            total += entry.tokens
+            if entry.limitDate > newestLimitDate {
+                newestLimitDate = entry.limitDate
+                newestLimit = entry.limit
             }
         }
+        let retained = Set(recentURLs)
+        usageCache = usageCache.filter { retained.contains($0.key) }
         cachedUsageLimit = newestLimit
         tokenCacheDate = Date()
         return (cachedTodayTokens, cachedUsageLimit)
+    }
+
+    private func readUsageEntry(from url: URL, modifiedAt: Date) -> UsageCacheEntry {
+        guard let handle = try? FileHandle(forReadingFrom: url) else {
+            return UsageCacheEntry(modifiedAt: modifiedAt, tokens: 0, limit: nil, limitDate: .distantPast)
+        }
+        defer { try? handle.close() }
+        let length = (try? handle.seekToEnd()) ?? 0
+        let sampleSize: UInt64 = 750_000
+        try? handle.seek(toOffset: length > sampleSize ? length - sampleSize : 0)
+        let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
+        for line in text.split(separator: "\n").reversed() {
+            guard let data = line.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let payload = object["payload"] as? [String: Any],
+                  payload["type"] as? String == "token_count",
+                  let info = payload["info"] as? [String: Any],
+                  let usage = info["total_token_usage"] as? [String: Any],
+                  let tokens = usage["total_tokens"] as? Int else { continue }
+            let eventDate = (object["timestamp"] as? String).flatMap(Self.parseDate) ?? modifiedAt
+            var limit: CodexUsageLimit?
+            if let limits = payload["rate_limits"] as? [String: Any],
+               let primary = limits["primary"] as? [String: Any],
+               let used = (primary["used_percent"] as? NSNumber)?.doubleValue {
+                limit = CodexUsageLimit(
+                    usedPercent: used,
+                    resetAt: (primary["resets_at"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) },
+                    planType: limits["plan_type"] as? String
+                )
+            }
+            return UsageCacheEntry(modifiedAt: modifiedAt, tokens: tokens, limit: limit, limitDate: eventDate)
+        }
+        return UsageCacheEntry(modifiedAt: modifiedAt, tokens: 0, limit: nil, limitDate: .distantPast)
     }
 
     private func activity(for file: URL) -> MonitoredRollout? {
