@@ -16,6 +16,7 @@ struct CodexStatusSnapshot {
     let usageLimit: CodexUsageLimit?
     let completedTask: CodexTaskItem?
     let viewedThread: CodexViewedThread?
+    let activeThreadID: String?
     let unreadThreadIDs: Set<String>?
     let unreadUpdatedAt: Date?
 }
@@ -72,6 +73,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
     private var desktopStateLogURL: URL?
     private var desktopLogOffset: UInt64 = 0
     private var cachedViewedThread: CodexViewedThread?
+    private var cachedActiveThreadID: String?
     private var cachedUnreadThreadIDs: Set<String>?
     private var cachedUnreadUpdatedAt: Date?
 
@@ -85,47 +87,59 @@ final class CodexTaskMonitor: @unchecked Sendable {
         if let completion = rollouts.first(where: {
             $0.activity.phase == .completed && Date().timeIntervalSince($0.activity.eventDate) < 8
         }) {
-            return CodexStatusSnapshot(primary: completion.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: completion.task, viewedThread: desktopState.viewedThread, unreadThreadIDs: desktopState.unreadThreadIDs, unreadUpdatedAt: desktopState.unreadUpdatedAt)
+            return CodexStatusSnapshot(primary: completion.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: completion.task, viewedThread: desktopState.viewedThread, activeThreadID: desktopState.activeThreadID, unreadThreadIDs: desktopState.unreadThreadIDs, unreadUpdatedAt: desktopState.unreadUpdatedAt)
         }
         if let active = rollouts.first(where: { [.running, .review, .waiting, .failed].contains($0.activity.phase) }) {
-            return CodexStatusSnapshot(primary: active.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, unreadThreadIDs: desktopState.unreadThreadIDs, unreadUpdatedAt: desktopState.unreadUpdatedAt)
+            return CodexStatusSnapshot(primary: active.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, activeThreadID: desktopState.activeThreadID, unreadThreadIDs: desktopState.unreadThreadIDs, unreadUpdatedAt: desktopState.unreadUpdatedAt)
         }
         let idle = CodexActivity(phase: .idle, label: "Codex 空闲", eventDate: .distantPast, startedAt: nil)
-        return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, unreadThreadIDs: desktopState.unreadThreadIDs, unreadUpdatedAt: desktopState.unreadUpdatedAt)
+        return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, activeThreadID: desktopState.activeThreadID, unreadThreadIDs: desktopState.unreadThreadIDs, unreadUpdatedAt: desktopState.unreadUpdatedAt)
     }
 
-    private func latestDesktopState() -> (viewedThread: CodexViewedThread?, unreadThreadIDs: Set<String>?, unreadUpdatedAt: Date?) {
+    private func latestDesktopState() -> (viewedThread: CodexViewedThread?, activeThreadID: String?, unreadThreadIDs: Set<String>?, unreadUpdatedAt: Date?) {
         guard let logURL = desktopLogURL(),
-              let handle = try? FileHandle(forReadingFrom: logURL) else { return (nil, nil, nil) }
+              let handle = try? FileHandle(forReadingFrom: logURL) else { return (nil, nil, nil, nil) }
         defer { try? handle.close() }
         let length = (try? handle.seekToEnd()) ?? 0
         if desktopStateLogURL != logURL || length < desktopLogOffset {
             desktopStateLogURL = logURL
             desktopLogOffset = length > 1_000_000 ? length - 1_000_000 : 0
             cachedViewedThread = nil
+            cachedActiveThreadID = nil
             cachedUnreadThreadIDs = nil
             cachedUnreadUpdatedAt = nil
         }
         guard length > desktopLogOffset else {
-            return (cachedViewedThread, cachedUnreadThreadIDs, cachedUnreadUpdatedAt)
+            return (cachedViewedThread, cachedActiveThreadID, cachedUnreadThreadIDs, cachedUnreadUpdatedAt)
         }
         try? handle.seek(toOffset: desktopLogOffset)
         let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
         desktopLogOffset = length
         let viewedPattern = #"thread_stream_view_activity_changed active=true conversationId=([0-9a-f-]+).*rendererWindowFocused=true"#
+        let activityPattern = #"thread_stream_view_activity_changed active=(true|false) conversationId=([0-9a-f-]+)"#
         let unreadPattern = #"\"id\":\"([0-9a-f-]+)\".*?\"hasUnreadTurn\":(true|false)"#
         guard let viewedExpression = try? NSRegularExpression(pattern: viewedPattern),
+              let activityExpression = try? NSRegularExpression(pattern: activityPattern),
               let unreadExpression = try? NSRegularExpression(pattern: unreadPattern) else {
-            return (nil, nil, nil)
+            return (nil, nil, nil, nil)
         }
         var viewedThread = cachedViewedThread
         var unreadThreadIDs = cachedUnreadThreadIDs
         var unreadUpdatedAt = cachedUnreadUpdatedAt
         var foundViewedThread = false
+        var foundActiveThread = false
         var foundUnreadState = false
         for line in text.split(separator: "\n").reversed() {
             let value = String(line)
             let range = NSRange(value.startIndex..., in: value)
+            if !foundActiveThread,
+               let match = activityExpression.firstMatch(in: value, range: range),
+               let stateRange = Range(match.range(at: 1), in: value),
+               let idRange = Range(match.range(at: 2), in: value) {
+                let id = String(value[idRange])
+                cachedActiveThreadID = value[stateRange] == "true" ? id : nil
+                foundActiveThread = true
+            }
             if !foundViewedThread,
                let match = viewedExpression.firstMatch(in: value, range: range),
                let idRange = Range(match.range(at: 1), in: value),
@@ -149,12 +163,12 @@ final class CodexTaskMonitor: @unchecked Sendable {
                 unreadUpdatedAt = updatedAt
                 foundUnreadState = true
             }
-            if foundViewedThread, foundUnreadState { break }
+            if foundViewedThread, foundActiveThread, foundUnreadState { break }
         }
         cachedViewedThread = viewedThread
         cachedUnreadThreadIDs = unreadThreadIDs
         cachedUnreadUpdatedAt = unreadUpdatedAt
-        return (viewedThread, unreadThreadIDs, unreadUpdatedAt)
+        return (viewedThread, cachedActiveThreadID, unreadThreadIDs, unreadUpdatedAt)
     }
 
     private func desktopLogURL() -> URL? {

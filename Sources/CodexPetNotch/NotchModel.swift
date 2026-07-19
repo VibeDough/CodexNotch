@@ -450,6 +450,10 @@ final class NotchModel: ObservableObject {
         if let viewedThread = snapshot.viewedThread {
             acknowledgeViewedCompletion(viewedThread)
         }
+        if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.openai.codex",
+           let activeThreadID = snapshot.activeThreadID {
+            acknowledgeActiveCompletion(threadID: activeThreadID)
+        }
         if let unreadThreadIDs = snapshot.unreadThreadIDs,
            let unreadUpdatedAt = snapshot.unreadUpdatedAt {
             acknowledgeReadCompletions(unreadThreadIDs: unreadThreadIDs, updatedAt: unreadUpdatedAt)
@@ -554,6 +558,14 @@ final class NotchModel: ObservableObject {
         acknowledgedCompletionKeys.formUnion(read.map(\.key))
         let readKeys = Set(read.map(\.key))
         pendingCompletions.removeAll { readKeys.contains($0.key) }
+        showNextCompletion()
+    }
+
+    private func acknowledgeActiveCompletion(threadID: String) {
+        let active = pendingCompletions.filter { $0.task.id == threadID }
+        guard !active.isEmpty else { return }
+        acknowledgedCompletionKeys.formUnion(active.map(\.key))
+        pendingCompletions.removeAll { $0.task.id == threadID }
         showNextCompletion()
     }
 
