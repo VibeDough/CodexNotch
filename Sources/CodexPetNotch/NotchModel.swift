@@ -318,7 +318,7 @@ final class NotchModel: ObservableObject {
 
         var components = URLComponents()
         components.scheme = "codex"
-        components.host = "newThread"
+        components.host = "new"
         components.queryItems = [URLQueryItem(name: "prompt", value: prompt)]
         if let url = components.url, NSWorkspace.shared.open(url) == false {
             openCodex()
