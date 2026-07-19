@@ -142,14 +142,14 @@ struct NotchView: View {
                     HStack(spacing: 8) {
                         Button(action: model.toggleSettings) {
                             Image(systemName: "gearshape.fill")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.system(size: model.isShowingSettings ? 10.5 : 12, weight: .semibold))
                                 .foregroundStyle(model.isShowingSettings ? .black : .white)
                                 .frame(width: 28, height: 28)
                                 .background {
                                     Circle()
                                         .fill(model.isShowingSettings ? .white : .white.opacity(0.1))
-                                        .frame(width: model.isShowingSettings ? 24 : 28,
-                                               height: model.isShowingSettings ? 24 : 28)
+                                        .frame(width: model.isShowingSettings ? 20 : 28,
+                                               height: model.isShowingSettings ? 20 : 28)
                                 }
                         }
                         .buttonStyle(.plain)
