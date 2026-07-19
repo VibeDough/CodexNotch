@@ -159,7 +159,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if screen.safeAreaInsets.top <= 0 {
             return NSSize(width: 270, height: model.visibleCompletionMessage == nil ? 36 : 80)
         }
-        return NSSize(width: 310, height: 38)
+        return NSSize(width: idleNotchWidth(on: screen), height: 38)
+    }
+
+    private func idleNotchWidth(on screen: NSScreen) -> CGFloat {
+        guard let leftArea = screen.auxiliaryTopLeftArea,
+              let rightArea = screen.auxiliaryTopRightArea else { return 360 }
+        let cameraHousingWidth = max(0, rightArea.minX - leftArea.maxX)
+        // Each wing needs room for the 94pt usage label plus its edge padding.
+        return min(450, max(360, ceil(cameraHousingWidth + 208)))
     }
 
     private func resizeForCurrentState() {

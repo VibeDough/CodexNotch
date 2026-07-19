@@ -54,6 +54,7 @@ struct NotchView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .ignoresSafeArea(.all)
         .background {
             if model.usesCompactBar && !showsDetails && !model.isExpanded {
                 Capsule().fill(.black)
@@ -767,20 +768,18 @@ private struct IslandEdgeShape: Shape {
 
 private struct EdgeTaperMask: Shape {
     func path(in rect: CGRect) -> Path {
-        let fullWidthStart = min(rect.height * 0.06, 8)
+        let fullWidthStart = min(rect.height * 0.09, 14)
         let fadeOutY: CGFloat = 0
         let maskWidth: CGFloat = 3.5
-        let leftStrokeCenter: CGFloat = 1.3
-        let rightStrokeCenter = rect.maxX - leftStrokeCenter
         var path = Path()
 
-        // The side strokes narrow geometrically to a point at the top.
-        path.move(to: CGPoint(x: leftStrokeCenter, y: fadeOutY))
+        // Converge beyond the stroke center so the final pixels visibly taper.
+        path.move(to: CGPoint(x: rect.minX, y: fadeOutY))
         path.addLine(to: CGPoint(x: 0, y: fullWidthStart))
         path.addLine(to: CGPoint(x: maskWidth, y: fullWidthStart))
         path.closeSubpath()
 
-        path.move(to: CGPoint(x: rightStrokeCenter, y: fadeOutY))
+        path.move(to: CGPoint(x: rect.maxX, y: fadeOutY))
         path.addLine(to: CGPoint(x: rect.maxX - maskWidth, y: fullWidthStart))
         path.addLine(to: CGPoint(x: rect.maxX, y: fullWidthStart))
         path.closeSubpath()
