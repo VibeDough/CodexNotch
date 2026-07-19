@@ -809,14 +809,30 @@ private struct EdgeGlowBorder: View {
     @ViewBuilder
     private func glowShape(angle: Double) -> some View {
         let style = AngularGradient(
-            colors: animated
-                ? [.cyan, .blue, .purple, .pink, .orange, .green, .cyan]
-                : [color, color],
+            gradient: Gradient(stops: animated
+                ? [
+                    .init(color: .clear, location: 0),
+                    .init(color: .clear, location: 0.52),
+                    .init(color: .purple.opacity(0.18), location: 0.61),
+                    .init(color: .purple, location: 0.69),
+                    .init(color: .blue, location: 0.76),
+                    .init(color: .cyan, location: 0.82),
+                    .init(color: .white.opacity(0.95), location: 0.85),
+                    .init(color: .cyan, location: 0.88),
+                    .init(color: .blue.opacity(0.42), location: 0.94),
+                    .init(color: .clear, location: 1)
+                ]
+                : [
+                    .init(color: color, location: 0),
+                    .init(color: color, location: 1)
+                ]),
             center: .center,
             angle: .degrees(angle)
         )
         if compact {
             ZStack {
+                Capsule()
+                    .stroke(.white.opacity(animated ? 0.07 : 0), lineWidth: 1)
                 Capsule()
                     .stroke(style, lineWidth: 8)
                     .blur(radius: 3)
@@ -828,6 +844,10 @@ private struct EdgeGlowBorder: View {
             .padding(1.4)
         } else {
             ZStack {
+                IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
+                    .stroke(.white.opacity(animated ? 0.07 : 0), lineWidth: 1)
+                    .mask { EdgeBodyMask(tipHeight: 18).fill(.white) }
+
                 IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
                     .stroke(
                         style,
