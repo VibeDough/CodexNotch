@@ -32,6 +32,12 @@ enum NotchPresentationMode: Equatable {
     case completion
 }
 
+private struct PendingCompletion {
+    let key: String
+    let task: CodexTaskItem
+    let message: String
+}
+
 @MainActor
 final class NotchModel: ObservableObject {
     @Published var state: PetState = .idle {
@@ -65,6 +71,8 @@ final class NotchModel: ObservableObject {
     private var dropExitTask: Task<Void, Never>?
     private var expandedForDrop = false
     private var completionDismissTask: Task<Void, Never>?
+    private var pendingCompletions: [PendingCompletion] = []
+    private var acknowledgedCompletionKeys: Set<String> = []
     private var reconnectTask: Task<Void, Never>?
     private var wasCodexConnected: Bool?
     private let taskMonitor = CodexTaskMonitor()
@@ -299,8 +307,11 @@ final class NotchModel: ObservableObject {
         pendingHoverValue = nil
         hoverSuppressedUntil = Date().addingTimeInterval(0.8)
         isHovered = false
-        completionMessage = nil
-        completedTask = nil
+        if let completion = pendingCompletions.first(where: { $0.task.id == task.id }) {
+            acknowledgedCompletionKeys.insert(completion.key)
+            pendingCompletions.removeAll { $0.key == completion.key }
+        }
+        showNextCompletion()
         NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
         openTask(task)
     }
@@ -422,8 +433,8 @@ final class NotchModel: ObservableObject {
         if usageLimit != snapshot.usageLimit {
             usageLimit = snapshot.usageLimit
         }
-        if snapshot.completedTask != nil {
-            completedTask = snapshot.completedTask
+        if let completedTask = snapshot.completedTask, activity.phase == .completed {
+            enqueueCompletion(completedTask, message: activity.label, eventDate: activity.eventDate)
         }
         if taskLayoutChanged {
             NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
@@ -476,6 +487,20 @@ final class NotchModel: ObservableObject {
     private func showCompletion(_ message: String) {
         completionDismissTask?.cancel()
         completionMessage = message
+        NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
+    }
+
+    private func enqueueCompletion(_ task: CodexTaskItem, message: String, eventDate: Date) {
+        let key = "\(task.id)|\(eventDate.timeIntervalSince1970)"
+        guard !acknowledgedCompletionKeys.contains(key),
+              !pendingCompletions.contains(where: { $0.key == key }) else { return }
+        pendingCompletions.append(PendingCompletion(key: key, task: task, message: message))
+        showNextCompletion()
+    }
+
+    private func showNextCompletion() {
+        completedTask = pendingCompletions.first?.task
+        completionMessage = pendingCompletions.first?.message
         NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
     }
 }
