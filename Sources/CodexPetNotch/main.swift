@@ -147,41 +147,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func notchSize(expanded: Bool, on screen: NSScreen? = nil) -> NSSize {
-        guard let screen = screen ?? preferences.targetScreen() else {
-            return expanded ? NSSize(width: 360, height: 126) : NSSize(width: 205, height: 44)
-        }
-        if expanded { return NSSize(width: 450, height: 126) }
-        if model.isShowingSettings { return NSSize(width: 450, height: 138) }
-        if model.waitingTask != nil { return NSSize(width: 450, height: 94) }
-        if model.visibleCompletionMessage != nil, model.completedTask != nil {
-            return NSSize(width: 450, height: 86)
-        }
-        if model.isTaskStatusPinned, model.activeTasks.count > 1 {
-            return NSSize(width: 450, height: 80 + CGFloat(model.activeTasks.count * 40))
-        }
-        if model.primaryTask != nil {
-            return NSSize(width: 450, height: 86)
-        }
-        if model.isHovered { return NSSize(width: 450, height: 112) }
-        if screen.safeAreaInsets.top <= 0 {
-            return NSSize(width: 270, height: model.visibleCompletionMessage == nil ? 36 : 80)
-        }
-        return NSSize(width: 310, height: 38)
+        let size = model.presentationSize
+        return NSSize(width: size.width, height: size.height)
     }
 
     private func panelSize(expanded: Bool, on screen: NSScreen? = nil) -> NSSize {
         guard let screen = screen ?? preferences.targetScreen() else {
-            return NSSize(width: 450, height: 112)
+            return NSSize(width: 450, height: 138)
         }
-        let usesHoverCanvas = screen.safeAreaInsets.top > 0
-            && !expanded
-            && !model.isShowingSettings
-            && model.waitingTask == nil
-            && model.visibleCompletionMessage == nil
-            && model.activeTasks.isEmpty
-        return usesHoverCanvas
-            ? NSSize(width: 450, height: 112)
-            : notchSize(expanded: expanded, on: screen)
+        let visibleSize = notchSize(expanded: expanded, on: screen)
+        guard screen.safeAreaInsets.top > 0 else { return visibleSize }
+        return NSSize(
+            width: max(450, visibleSize.width),
+            height: max(138, visibleSize.height)
+        )
     }
 
     private func resizeForCurrentState() {

@@ -33,7 +33,8 @@ struct NotchView: View {
             } else if let task = model.primaryTask {
                 persistentTaskStatus(task)
             } else if model.activeTasks.isEmpty,
-                      model.visibleCompletionMessage == nil {
+                      model.visibleCompletionMessage == nil,
+                      !model.isExpanded {
                 tokenDetails
                     .opacity(showsUsageDetails ? 1 : 0)
                     .transition(.opacity)
@@ -74,8 +75,7 @@ struct NotchView: View {
         }
         .overlay { edgeStatusGlow }
         .animation(.spring(response: 0.34, dampingFraction: 0.72), value: model.completionMessage)
-        .animation(.spring(response: 0.3, dampingFraction: 0.82), value: model.isExpanded)
-        .animation(.smooth(duration: 0.2), value: model.isHovered)
+        .animation(.smooth(duration: 0.22), value: model.presentationMode)
         .onChange(of: model.isDropTargeted) { _, targeted in
             model.setDropTargeted(targeted)
         }
@@ -86,21 +86,7 @@ struct NotchView: View {
     }
 
     private var visualSize: CGSize {
-        if model.isExpanded { return CGSize(width: 450, height: 126) }
-        if model.isShowingSettings { return CGSize(width: 450, height: 138) }
-        if model.waitingTask != nil { return CGSize(width: 450, height: 94) }
-        if model.visibleCompletionMessage != nil, model.completedTask != nil {
-            return CGSize(width: 450, height: 86)
-        }
-        if model.isTaskStatusPinned, model.activeTasks.count > 1 {
-            return CGSize(width: 450, height: 80 + CGFloat(model.activeTasks.count * 40))
-        }
-        if model.primaryTask != nil { return CGSize(width: 450, height: 86) }
-        if model.isHovered { return CGSize(width: 450, height: 112) }
-        if model.usesCompactBar {
-            return CGSize(width: 270, height: model.visibleCompletionMessage == nil ? 36 : 80)
-        }
-        return CGSize(width: 310, height: 38)
+        model.presentationSize
     }
 
     private var collapsedBar: some View {

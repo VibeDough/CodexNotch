@@ -20,6 +20,18 @@ enum UsageRemainingLevel {
     case unavailable
 }
 
+enum NotchPresentationMode: Equatable {
+    case idle
+    case compactIdle
+    case usage
+    case drop
+    case settings
+    case task
+    case taskList(Int)
+    case waiting
+    case completion
+}
+
 @MainActor
 final class NotchModel: ObservableObject {
     @Published var state: PetState = .idle {
@@ -201,6 +213,31 @@ final class NotchModel: ObservableObject {
         activeTasks.first { $0.phase == .waiting }
     }
 
+    var presentationMode: NotchPresentationMode {
+        if isShowingSettings { return .settings }
+        if waitingTask != nil { return .waiting }
+        if visibleCompletionMessage != nil { return .completion }
+        if isTaskStatusPinned, activeTasks.count > 1 { return .taskList(activeTasks.count) }
+        if primaryTask != nil { return .task }
+        if isExpanded { return .drop }
+        if isHovered { return .usage }
+        return usesCompactBar ? .compactIdle : .idle
+    }
+
+    var presentationSize: CGSize {
+        switch presentationMode {
+        case .idle: CGSize(width: 310, height: 38)
+        case .compactIdle: CGSize(width: 270, height: 36)
+        case .usage: CGSize(width: 450, height: 112)
+        case .drop: CGSize(width: 450, height: 126)
+        case .settings: CGSize(width: 450, height: 138)
+        case .task: CGSize(width: 450, height: 86)
+        case let .taskList(count): CGSize(width: 450, height: 80 + CGFloat(count * 40))
+        case .waiting: CGSize(width: 450, height: 94)
+        case .completion: CGSize(width: 450, height: completedTask == nil ? 88 : 86)
+        }
+    }
+
     var primaryTask: CodexTaskItem? {
         let priority: [CodexActivity.Phase] = [.waiting, .failed, .review, .running]
         return priority.lazy.compactMap { phase in
@@ -361,6 +398,14 @@ final class NotchModel: ObservableObject {
             activeTasks = snapshot.tasks
             taskLayoutChanged = true
         }
+        if snapshot.activeCount > 0, isExpanded || pendingDropPrompt != nil {
+            isExpanded = false
+            isDropTargeted = false
+            expandedForDrop = false
+            pendingDropPrompt = nil
+            latestDrop = "拖入文件、网址或文字"
+            taskLayoutChanged = true
+        }
         if snapshot.tasks.count < 2, isTaskStatusPinned {
             isTaskStatusPinned = false
             taskLayoutChanged = true
@@ -380,7 +425,6 @@ final class NotchModel: ObservableObject {
         guard activity != lastActivity else { return }
         let isNewCompletion = activity.phase == .completed && activity.eventDate != lastActivity.eventDate
         lastActivity = activity
-        latestDrop = activity.label
         statusAnimationStartedAt = Date()
         switch activity.phase {
         case .idle: state = .idle
