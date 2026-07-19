@@ -834,6 +834,10 @@ private struct EdgeGlowBorder: View {
                 Capsule()
                     .stroke(.white.opacity(animated ? 0.07 : 0), lineWidth: 1)
                 Capsule()
+                    .stroke(style, lineWidth: 18)
+                    .blur(radius: 9)
+                    .opacity(0.16)
+                Capsule()
                     .stroke(style, lineWidth: 8)
                     .blur(radius: 3)
                     .opacity(0.28)
@@ -846,6 +850,15 @@ private struct EdgeGlowBorder: View {
             ZStack {
                 IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
                     .stroke(.white.opacity(animated ? 0.07 : 0), lineWidth: 1)
+                    .mask { EdgeBodyMask(tipHeight: 18).fill(.white) }
+
+                IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
+                    .stroke(
+                        style,
+                        style: StrokeStyle(lineWidth: 18, lineCap: .round, lineJoin: .round)
+                    )
+                    .blur(radius: 9)
+                    .opacity(0.16)
                     .mask { EdgeBodyMask(tipHeight: 18).fill(.white) }
 
                 IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
