@@ -176,7 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         pendingResizeTask?.cancel()
         if newSize.height < panel.frame.height {
             pendingResizeTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .milliseconds(190))
+                try? await Task.sleep(for: .milliseconds(80))
                 guard !Task.isCancelled else { return }
                 self?.applyCurrentFrame()
             }

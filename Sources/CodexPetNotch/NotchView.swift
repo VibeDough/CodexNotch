@@ -34,10 +34,7 @@ struct NotchView: View {
                 persistentTaskStatus(task)
             } else if showsUsageDetails {
                 tokenDetails
-                    .transition(.asymmetric(
-                        insertion: .offset(y: -7).combined(with: .opacity),
-                        removal: .offset(y: -4).combined(with: .opacity)
-                    ))
+                    .transition(.opacity)
             } else if let message = model.visibleCompletionMessage {
                 completionBubble(message)
                     .transition(.asymmetric(
@@ -76,7 +73,7 @@ struct NotchView: View {
         .overlay { edgeStatusGlow }
         .animation(.spring(response: 0.34, dampingFraction: 0.72), value: model.completionMessage)
         .animation(.spring(response: 0.3, dampingFraction: 0.82), value: model.isExpanded)
-        .animation(.easeOut(duration: 0.22), value: showsUsageDetails)
+        .animation(.easeOut(duration: 0.12), value: showsUsageDetails)
         .onChange(of: model.isDropTargeted) { _, targeted in
             model.setDropTargeted(targeted)
         }

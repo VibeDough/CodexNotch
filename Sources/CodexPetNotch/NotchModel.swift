@@ -69,8 +69,6 @@ final class NotchModel: ObservableObject {
         if hovered && Date() < hoverSuppressedUntil { return }
         if !hovered && isDropTargeted { return }
         if isHovered == hovered {
-            // Cancel only a pending transition in the opposite direction.
-            // Once the panel has grown, keep the short content-reveal phase alive.
             if pendingHoverValue != nil {
                 pendingHoverValue = nil
                 hoverTask?.cancel()
@@ -81,24 +79,12 @@ final class NotchModel: ObservableObject {
         pendingHoverValue = hovered
         hoverTask?.cancel()
         hoverTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: hovered ? .milliseconds(70) : .milliseconds(140))
+            try? await Task.sleep(for: hovered ? .milliseconds(35) : .milliseconds(90))
             guard !Task.isCancelled, let self, self.isHovered != hovered else { return }
             self.pendingHoverValue = nil
-            if hovered {
-                // Grow the opaque panel first, then reveal usage content.
-                self.isHovered = true
-                NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
-                try? await Task.sleep(for: .milliseconds(34))
-                guard !Task.isCancelled, self.isHovered else { return }
-                self.isHoverContentVisible = true
-            } else {
-                // Hide content while the panel is still full-size, then collapse it.
-                self.isHoverContentVisible = false
-                try? await Task.sleep(for: .milliseconds(34))
-                guard !Task.isCancelled else { return }
-                self.isHovered = false
-                NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
-            }
+            self.isHovered = hovered
+            self.isHoverContentVisible = hovered
+            NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
         }
     }
 
