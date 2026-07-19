@@ -653,6 +653,19 @@ private struct EdgeGlowBorder: View {
                 glowShape(angle: angle)
                     .mask {
                         EdgeTaperMask()
+                            .fill(
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .clear, location: 0),
+                                        .init(color: .clear, location: 0.06),
+                                        .init(color: .white.opacity(0.12), location: 0.18),
+                                        .init(color: .white.opacity(0.55), location: 0.34),
+                                        .init(color: .white, location: 0.52)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
                     }
             }
         }
@@ -680,7 +693,6 @@ private struct EdgeGlowBorder: View {
                     style: StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round)
                 )
                 .shadow(color: color.opacity(0.65), radius: 2.8)
-                .padding(1.4)
         }
     }
 }
@@ -691,18 +703,19 @@ private struct IslandEdgeShape: Shape {
 
     func path(in rect: CGRect) -> Path {
         let s = min(shoulder, rect.width / 5)
-        let r = min(bottomRadius, rect.height / 2)
+        let bottomY = rect.maxY - 1.4
+        let r = min(bottomRadius, (bottomY - rect.minY) / 2)
         var path = Path()
         path.move(to: CGPoint(x: rect.minX + s, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.minX + s, y: rect.maxY - r))
+        path.addLine(to: CGPoint(x: rect.minX + s, y: bottomY - r))
         path.addQuadCurve(
-            to: CGPoint(x: rect.minX + s + r, y: rect.maxY),
-            control: CGPoint(x: rect.minX + s, y: rect.maxY)
+            to: CGPoint(x: rect.minX + s + r, y: bottomY),
+            control: CGPoint(x: rect.minX + s, y: bottomY)
         )
-        path.addLine(to: CGPoint(x: rect.maxX - s - r, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX - s - r, y: bottomY))
         path.addQuadCurve(
-            to: CGPoint(x: rect.maxX - s, y: rect.maxY - r),
-            control: CGPoint(x: rect.maxX - s, y: rect.maxY)
+            to: CGPoint(x: rect.maxX - s, y: bottomY - r),
+            control: CGPoint(x: rect.maxX - s, y: bottomY)
         )
         path.addLine(to: CGPoint(x: rect.maxX - s, y: rect.minY))
         return path
