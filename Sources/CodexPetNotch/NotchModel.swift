@@ -66,6 +66,7 @@ final class NotchModel: ObservableObject {
     @Published var completionMessage: String?
     @Published var completedTask: CodexTaskItem?
     @Published var pendingCompletionCount = 0
+    @Published var isCompletionStackCollapsed = false
     @Published var statusAnimationStartedAt = Date()
 
     private var activityTimer: Timer?
@@ -235,6 +236,10 @@ final class NotchModel: ObservableObject {
         return completionMessage
     }
 
+    var hasCollapsedCompletion: Bool {
+        isCompletionStackCollapsed && visibleCompletionMessage != nil
+    }
+
     var waitingTask: CodexTaskItem? {
         activeTasks.first { $0.phase == .waiting }
     }
@@ -245,9 +250,11 @@ final class NotchModel: ObservableObject {
         if waitingTask != nil { return .waiting }
         if isTaskStatusPinned, activeTasks.count > 1 { return .taskList(activeTasks.count) }
         if primaryTask != nil {
-            return visibleCompletionMessage == nil ? .task : .taskWithCompletion
+            return visibleCompletionMessage == nil || isCompletionStackCollapsed ? .task : .taskWithCompletion
         }
-        if visibleCompletionMessage != nil { return .completion }
+        if visibleCompletionMessage != nil {
+            return isCompletionStackCollapsed ? (usesCompactBar ? .compactIdle : .idle) : .completion
+        }
         if isHovered { return .usage }
         return usesCompactBar ? .compactIdle : .idle
     }
@@ -323,6 +330,12 @@ final class NotchModel: ObservableObject {
         showNextCompletion()
         NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
         openTask(task)
+    }
+
+    func toggleCompletionStackCollapsed() {
+        guard pendingCompletionCount > 0 else { return }
+        isCompletionStackCollapsed.toggle()
+        NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
     }
 
     func receive(providers: [NSItemProvider]) -> Bool {
@@ -550,6 +563,9 @@ final class NotchModel: ObservableObject {
         pendingCompletionCount = pendingCompletions.count
         completedTask = pendingCompletions.first?.task
         completionMessage = pendingCompletions.first?.message
+        if pendingCompletions.isEmpty {
+            isCompletionStackCollapsed = false
+        }
         NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
     }
 }

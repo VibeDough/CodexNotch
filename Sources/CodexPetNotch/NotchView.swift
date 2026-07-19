@@ -105,6 +105,9 @@ struct NotchView: View {
                     } else if model.connectionState == .reconnected {
                         Image(systemName: "arrow.triangle.2.circlepath")
                         Text("已重连")
+                    } else if model.hasCollapsedCompletion {
+                        Text(model.remainingUsageText)
+                            .font(.system(size: 13, weight: .black, design: .rounded))
                     } else if model.isHovered {
                         Text(model.activeTasks.isEmpty ? "用量" : "任务")
                     } else {
@@ -126,7 +129,13 @@ struct NotchView: View {
 
             ZStack {
                 Group {
-                    if model.activeTasks.count > 1 {
+                    if model.hasCollapsedCompletion {
+                        Button(action: model.toggleCompletionStackCollapsed) {
+                            completionCountBadge
+                        }
+                        .buttonStyle(.plain)
+                        .help("展开已完成任务")
+                    } else if model.activeTasks.count > 1 {
                         Button { model.toggleTaskStatusPinned() } label: { taskStatus }
                             .buttonStyle(.plain)
                             .help(model.isTaskStatusPinned ? "取消常驻任务" : "常驻显示任务")
@@ -134,9 +143,9 @@ struct NotchView: View {
                         taskStatus
                     }
                 }
-                .opacity(model.isHovered ? 0 : 1)
+                .opacity(model.isHovered && !model.hasCollapsedCompletion ? 0 : 1)
 
-                if model.isHovered {
+                if model.isHovered && !model.hasCollapsedCompletion {
                     HStack(spacing: 8) {
                         Button(action: model.toggleSettings) {
                             Image(systemName: "gearshape.fill")
@@ -176,7 +185,9 @@ struct NotchView: View {
         .frame(height: collapsedBarHeight)
         .contentShape(Rectangle())
         .onTapGesture {
-            if model.activeTasks.count > 1 {
+            if model.hasCollapsedCompletion {
+                model.toggleCompletionStackCollapsed()
+            } else if model.activeTasks.count > 1 {
                 model.toggleTaskStatusPinned()
             } else if let task = model.primaryTask {
                 model.openTask(task)
@@ -249,6 +260,21 @@ struct NotchView: View {
         }
         .frame(width: 68, height: 28, alignment: .trailing)
         .accessibilityLabel("正在执行 \(model.activeTaskCount) 个任务")
+    }
+
+    private var completionCountBadge: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 8, weight: .black))
+            Text("\(model.pendingCompletionCount)")
+                .font(.system(size: 12, weight: .black, design: .rounded))
+                .contentTransition(.numericText())
+        }
+        .foregroundStyle(Color(red: 0.06, green: 0.38, blue: 0.17))
+        .padding(.horizontal, 8)
+        .frame(height: 24)
+        .background(Color(red: 0.46, green: 0.9, blue: 0.59), in: Capsule())
+        .accessibilityLabel("\(model.pendingCompletionCount) 个待查看任务")
     }
 
     private var currentStatusText: String {
@@ -521,6 +547,15 @@ struct NotchView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 6)
+            Button(action: model.toggleCompletionStackCollapsed) {
+                Image(systemName: "chevron.up")
+                    .font(.system(size: 8.5, weight: .black))
+                    .foregroundStyle(.white.opacity(0.66))
+                    .frame(width: 24, height: 24)
+                    .background(.white.opacity(0.1), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .help("收起已完成任务")
             Button {
                 withAnimation(.smooth(duration: 0.22)) {
                     model.acknowledgeCompletedTask(task)
@@ -554,6 +589,15 @@ struct NotchView: View {
                     .font(.system(size: 9, weight: .black, design: .rounded))
                     .foregroundStyle(.white.opacity(0.65))
             }
+            Button(action: model.toggleCompletionStackCollapsed) {
+                Image(systemName: "chevron.up")
+                    .font(.system(size: 7.5, weight: .black))
+                    .foregroundStyle(.white.opacity(0.62))
+                    .frame(width: 22, height: 22)
+                    .background(.white.opacity(0.09), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .help("收起已完成任务")
             Button {
                 withAnimation(.smooth(duration: 0.22)) {
                     model.acknowledgeCompletedTask(task)
