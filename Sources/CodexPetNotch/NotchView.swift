@@ -10,7 +10,7 @@ struct NotchView: View {
     }
 
     private var showsUsageDetails: Bool {
-        model.isHovered && model.activeTasks.isEmpty
+        model.isHovered && model.activeTasks.isEmpty && !model.hasCollapsedCompletion
     }
 
     private var showsDetails: Bool {
@@ -66,7 +66,8 @@ struct NotchView: View {
             } else {
                 IslandShape(
                     shoulder: 0,
-                    bottomRadius: showsDetails || model.primaryTask != nil || model.visibleCompletionMessage != nil
+                    bottomRadius: showsDetails || model.primaryTask != nil
+                        || (model.visibleCompletionMessage != nil && !model.isCompletionStackCollapsed)
                         || model.waitingTask != nil || model.isExpanded ? 18 : 12
                 )
                 .fill(.black)
@@ -207,7 +208,7 @@ struct NotchView: View {
 
     private var collapsedBarHeight: CGFloat {
         let isIdle = model.activeTasks.isEmpty
-            && model.visibleCompletionMessage == nil
+            && (model.visibleCompletionMessage == nil || model.hasCollapsedCompletion)
             && model.waitingTask == nil
             && !model.isExpanded
             && !model.isShowingSettings
@@ -229,7 +230,7 @@ struct NotchView: View {
     private var usesSmallIdleLayout: Bool {
         !model.usesCompactBar
             && model.activeTasks.isEmpty
-            && model.visibleCompletionMessage == nil
+            && (model.visibleCompletionMessage == nil || model.hasCollapsedCompletion)
             && model.waitingTask == nil
             && !model.isHovered
             && !model.isExpanded
