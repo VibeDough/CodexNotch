@@ -813,12 +813,12 @@ private struct EdgeGlowBorder: View {
                         style,
                         style: StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round)
                     )
-                    .mask { EdgeBodyMask(tipHeight: 8).fill(.white) }
+                    .mask { EdgeBodyMask(tipHeight: 18).fill(.white) }
+                    .shadow(color: color.opacity(0.65), radius: 2.8)
 
-                EdgeTaperTips(tipHeight: 8, baseWidth: 2.7)
+                EdgeTaperTips(tipHeight: 18, baseWidth: 3.2)
                     .fill(style)
             }
-            .shadow(color: color.opacity(0.65), radius: 2.8)
         }
     }
 }
