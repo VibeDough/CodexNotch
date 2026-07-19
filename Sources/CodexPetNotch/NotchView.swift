@@ -82,8 +82,8 @@ struct NotchView: View {
                 .allowsHitTesting(false)
         }
         .overlay { edgeStatusGlow }
-        .animation(.spring(response: 0.34, dampingFraction: 0.72), value: model.completionMessage)
         .animation(.smooth(duration: 0.22), value: model.presentationMode)
+        .animation(.smooth(duration: 0.22), value: model.completedTask?.id)
         .onChange(of: model.isDropTargeted) { _, targeted in
             model.setDropTargeted(targeted)
         }
@@ -543,7 +543,11 @@ struct NotchView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 6)
-            Button { model.acknowledgeCompletedTask(task) } label: {
+            Button {
+                withAnimation(.smooth(duration: 0.22)) {
+                    model.acknowledgeCompletedTask(task)
+                }
+            } label: {
                 Image(systemName: "checkmark")
                     .font(.system(size: 13, weight: .black))
                     .foregroundStyle(Color(red: 0.1, green: 0.55, blue: 0.28))
@@ -572,7 +576,11 @@ struct NotchView: View {
                     .font(.system(size: 9, weight: .black, design: .rounded))
                     .foregroundStyle(.white.opacity(0.65))
             }
-            Button { model.acknowledgeCompletedTask(task) } label: {
+            Button {
+                withAnimation(.smooth(duration: 0.22)) {
+                    model.acknowledgeCompletedTask(task)
+                }
+            } label: {
                 Image(systemName: "checkmark")
                     .font(.system(size: 10, weight: .black))
                     .foregroundStyle(Color(red: 0.1, green: 0.55, blue: 0.28))
@@ -589,7 +597,7 @@ struct NotchView: View {
                 .fill(.white.opacity(0.08))
                 .frame(height: 1)
         }
-        .transition(.move(edge: .top).combined(with: .opacity))
+        .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
     }
 
     private func confirmationCard(_ task: CodexTaskItem) -> some View {
