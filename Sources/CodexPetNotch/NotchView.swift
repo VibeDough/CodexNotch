@@ -46,12 +46,6 @@ struct NotchView: View {
                 tokenDetails
                     .opacity(showsUsageDetails ? 1 : 0)
                     .transition(.opacity)
-            } else if let message = model.visibleCompletionMessage {
-                completionBubble(message)
-                    .transition(.asymmetric(
-                        insertion: .scale(scale: 0.62, anchor: .top).combined(with: .opacity),
-                        removal: .scale(scale: 0.88, anchor: .top).combined(with: .opacity)
-                    ))
             }
 
             if model.isExpanded {
@@ -462,28 +456,6 @@ struct NotchView: View {
         guard let startedAt else { return "--:--" }
         let seconds = max(0, Int(model.clockTick.timeIntervalSince(startedAt)))
         return String(format: "%02d:%02d", seconds / 60, seconds % 60)
-    }
-
-    private func completionBubble(_ message: String) -> some View {
-        HStack(spacing: 8) {
-            Spacer(minLength: 8)
-            Text(message)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.white)
-                .lineLimit(1)
-            ZStack {
-                Circle()
-                    .fill(.white.opacity(0.13))
-                    .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 1))
-                Image(systemName: "checkmark")
-                    .font(.system(size: 9, weight: .black))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 20, height: 20)
-            Spacer(minLength: 8)
-        }
-        .padding(.horizontal, 13)
-        .frame(maxWidth: .infinity, minHeight: 40)
     }
 
     private func persistentTaskStatus(_ task: CodexTaskItem) -> some View {

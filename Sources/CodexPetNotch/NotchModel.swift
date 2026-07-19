@@ -75,7 +75,6 @@ final class NotchModel: ObservableObject {
     private var hoverSuppressedUntil = Date.distantPast
     private var dropExitTask: Task<Void, Never>?
     private var expandedForDrop = false
-    private var completionDismissTask: Task<Void, Never>?
     private var pendingCompletions: [PendingCompletion] = []
     private var acknowledgedCompletionKeys: Set<String> = []
     private var reconnectTask: Task<Void, Never>?
@@ -232,7 +231,7 @@ final class NotchModel: ObservableObject {
     }
 
     var visibleCompletionMessage: String? {
-        guard state != .waiting, state != .failed else { return nil }
+        guard state != .waiting, state != .failed, completedTask != nil else { return nil }
         return completionMessage
     }
 
@@ -313,7 +312,6 @@ final class NotchModel: ObservableObject {
     }
 
     func acknowledgeCompletedTask(_ task: CodexTaskItem) {
-        completionDismissTask?.cancel()
         hoverTask?.cancel()
         pendingHoverValue = nil
         hoverSuppressedUntil = Date().addingTimeInterval(0.8)
@@ -455,7 +453,6 @@ final class NotchModel: ObservableObject {
             NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
         }
         guard activity != lastActivity else { return }
-        let isNewCompletion = activity.phase == .completed && activity.eventDate != lastActivity.eventDate
         lastActivity = activity
         statusAnimationStartedAt = Date()
         switch activity.phase {
@@ -465,7 +462,6 @@ final class NotchModel: ObservableObject {
         case .waiting: state = .waiting
         case .completed:
             state = .jumping
-            if isNewCompletion { showCompletion(activity.label) }
         case .failed: state = .failed
         }
     }
@@ -515,12 +511,6 @@ final class NotchModel: ObservableObject {
             }
         }
         networkMonitor.start(queue: DispatchQueue(label: "49agent.network-monitor"))
-    }
-
-    private func showCompletion(_ message: String) {
-        completionDismissTask?.cancel()
-        completionMessage = message
-        NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
     }
 
     private func enqueueCompletion(_ task: CodexTaskItem, message: String, eventDate: Date) {
