@@ -69,13 +69,13 @@ struct NotchView: View {
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(.black)
-                .frame(height: 4)
+                .frame(height: 12)
                 .allowsHitTesting(false)
         }
         .overlay { edgeStatusGlow }
         .animation(.spring(response: 0.34, dampingFraction: 0.72), value: model.completionMessage)
         .animation(.spring(response: 0.3, dampingFraction: 0.82), value: model.isExpanded)
-        .animation(.spring(response: 0.28, dampingFraction: 0.88), value: showsUsageDetails)
+        .animation(.easeOut(duration: 0.22), value: showsUsageDetails)
         .onChange(of: model.isDropTargeted) { _, targeted in
             model.setDropTargeted(targeted)
         }
