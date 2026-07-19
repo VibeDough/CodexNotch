@@ -796,102 +796,46 @@ private struct EdgeGlowBorder: View {
     let color: Color
 
     var body: some View {
-        GeometryReader { _ in
-            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !animated)) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: !animated)) { timeline in
+            Canvas { context, size in
                 let angle = timeline.date.timeIntervalSinceReferenceDate
                     .truncatingRemainder(dividingBy: 2.8) / 2.8 * 360
-                glowShape(angle: angle)
+                let rect = CGRect(origin: .zero, size: size).insetBy(dx: 1.4, dy: 1.4)
+                let path = compact
+                    ? Capsule().path(in: rect)
+                    : IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12).path(in: rect)
+                if animated {
+                    context.stroke(path, with: .color(.white.opacity(0.07)), lineWidth: 1)
+                }
+                let gradient = Gradient(stops: animated
+                    ? [
+                        .init(color: .clear, location: 0),
+                        .init(color: .clear, location: 0.52),
+                        .init(color: .purple.opacity(0.18), location: 0.61),
+                        .init(color: .purple, location: 0.69),
+                        .init(color: .blue, location: 0.76),
+                        .init(color: .cyan, location: 0.82),
+                        .init(color: .white.opacity(0.95), location: 0.85),
+                        .init(color: .cyan, location: 0.88),
+                        .init(color: .blue.opacity(0.42), location: 0.94),
+                        .init(color: .clear, location: 1)
+                    ]
+                    : [
+                        .init(color: color, location: 0),
+                        .init(color: color, location: 1)
+                    ])
+                context.stroke(
+                    path,
+                    with: .conicGradient(
+                        gradient,
+                        center: CGPoint(x: size.width / 2, y: size.height / 2),
+                        angle: .degrees(angle)
+                    ),
+                    style: StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round)
+                )
             }
         }
-        .drawingGroup(opaque: false, colorMode: .linear)
         .allowsHitTesting(false)
-    }
-
-    @ViewBuilder
-    private func glowShape(angle: Double) -> some View {
-        let style = AngularGradient(
-            gradient: Gradient(stops: animated
-                ? [
-                    .init(color: .clear, location: 0),
-                    .init(color: .clear, location: 0.52),
-                    .init(color: .purple.opacity(0.18), location: 0.61),
-                    .init(color: .purple, location: 0.69),
-                    .init(color: .blue, location: 0.76),
-                    .init(color: .cyan, location: 0.82),
-                    .init(color: .white.opacity(0.95), location: 0.85),
-                    .init(color: .cyan, location: 0.88),
-                    .init(color: .blue.opacity(0.42), location: 0.94),
-                    .init(color: .clear, location: 1)
-                ]
-                : [
-                    .init(color: color, location: 0),
-                    .init(color: color, location: 1)
-                ]),
-            center: .center,
-            angle: .degrees(angle)
-        )
-        if compact {
-            ZStack {
-                Capsule()
-                    .stroke(.white.opacity(animated ? 0.07 : 0), lineWidth: 1)
-                Capsule()
-                    .stroke(style, lineWidth: 3)
-                    .blur(radius: 14)
-                    .opacity(0.5)
-                    .mask { Capsule().fill(.white) }
-                Capsule()
-                    .stroke(style, lineWidth: 8)
-                    .blur(radius: 3)
-                    .opacity(0.28)
-                Capsule()
-                    .stroke(style, lineWidth: 2.7)
-                    .shadow(color: color.opacity(0.65), radius: 2.8)
-            }
-            .padding(1.4)
-        } else {
-            ZStack {
-                IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
-                    .stroke(.white.opacity(animated ? 0.07 : 0), lineWidth: 1)
-                    .mask { EdgeBodyMask(tipHeight: 18).fill(.white) }
-
-                IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
-                    .stroke(
-                        style,
-                        style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
-                    )
-                    .blur(radius: 14)
-                    .opacity(0.5)
-                    .mask { EdgeBodyMask(tipHeight: 18).fill(.white) }
-                    .mask {
-                        IslandShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
-                            .fill(.white)
-                    }
-
-                IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
-                    .stroke(
-                        style,
-                        style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
-                    )
-                    .blur(radius: 3)
-                    .opacity(0.28)
-                    .mask { EdgeBodyMask(tipHeight: 18).fill(.white) }
-
-                IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
-                    .stroke(
-                        style,
-                        style: StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round)
-                    )
-                    .mask { EdgeBodyMask(tipHeight: 18).fill(.white) }
-                    .shadow(color: color.opacity(0.65), radius: 2.8)
-                    .mask {
-                        IslandShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
-                            .fill(.white)
-                    }
-
-                EdgeTaperTips(tipHeight: 18, baseWidth: 3.2)
-                    .fill(style)
-            }
-        }
     }
 }
 
@@ -926,40 +870,6 @@ private struct IslandEdgeShape: Shape {
             control: CGPoint(x: rightX, y: bottomY)
         )
         path.addLine(to: CGPoint(x: rightX, y: rect.minY))
-        return path
-    }
-}
-
-private struct EdgeBodyMask: Shape {
-    let tipHeight: CGFloat
-
-    func path(in rect: CGRect) -> Path {
-        Path(CGRect(
-            x: rect.minX,
-            y: min(tipHeight, rect.height),
-            width: rect.width,
-            height: max(0, rect.height - tipHeight)
-        ))
-    }
-}
-
-private struct EdgeTaperTips: Shape {
-    let tipHeight: CGFloat
-    let baseWidth: CGFloat
-
-    func path(in rect: CGRect) -> Path {
-        let height = min(tipHeight, rect.height)
-        var path = Path()
-
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + height))
-        path.addLine(to: CGPoint(x: rect.minX + baseWidth, y: rect.minY + height))
-        path.closeSubpath()
-
-        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX - baseWidth, y: rect.minY + height))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + height))
-        path.closeSubpath()
         return path
     }
 }
