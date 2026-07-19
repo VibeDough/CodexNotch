@@ -797,12 +797,13 @@ private struct EdgeGlowBorder: View {
 
     var body: some View {
         GeometryReader { _ in
-            TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: !animated)) { timeline in
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !animated)) { timeline in
                 let angle = timeline.date.timeIntervalSinceReferenceDate
                     .truncatingRemainder(dividingBy: 2.8) / 2.8 * 360
                 glowShape(angle: angle)
             }
         }
+        .drawingGroup(opaque: false, colorMode: .linear)
         .allowsHitTesting(false)
     }
 
@@ -835,8 +836,9 @@ private struct EdgeGlowBorder: View {
                     .stroke(.white.opacity(animated ? 0.07 : 0), lineWidth: 1)
                 Capsule()
                     .stroke(style, lineWidth: 3)
-                    .blur(radius: 9)
-                    .opacity(0.42)
+                    .blur(radius: 14)
+                    .opacity(0.5)
+                    .mask { Capsule().fill(.white) }
                 Capsule()
                     .stroke(style, lineWidth: 8)
                     .blur(radius: 3)
@@ -857,9 +859,13 @@ private struct EdgeGlowBorder: View {
                         style,
                         style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
                     )
-                    .blur(radius: 9)
-                    .opacity(0.42)
+                    .blur(radius: 14)
+                    .opacity(0.5)
                     .mask { EdgeBodyMask(tipHeight: 18).fill(.white) }
+                    .mask {
+                        IslandShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
+                            .fill(.white)
+                    }
 
                 IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
                     .stroke(
@@ -877,6 +883,10 @@ private struct EdgeGlowBorder: View {
                     )
                     .mask { EdgeBodyMask(tipHeight: 18).fill(.white) }
                     .shadow(color: color.opacity(0.65), radius: 2.8)
+                    .mask {
+                        IslandShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
+                            .fill(.white)
+                    }
 
                 EdgeTaperTips(tipHeight: 18, baseWidth: 3.2)
                     .fill(style)
