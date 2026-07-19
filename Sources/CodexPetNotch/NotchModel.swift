@@ -225,12 +225,12 @@ final class NotchModel: ObservableObject {
     }
 
     var presentationMode: NotchPresentationMode {
+        if isExpanded { return .drop }
         if isShowingSettings { return .settings }
         if waitingTask != nil { return .waiting }
         if visibleCompletionMessage != nil { return .completion }
         if isTaskStatusPinned, activeTasks.count > 1 { return .taskList(activeTasks.count) }
         if primaryTask != nil { return .task }
-        if isExpanded { return .drop }
         if isHovered { return .usage }
         return usesCompactBar ? .compactIdle : .idle
     }
@@ -371,13 +371,16 @@ final class NotchModel: ObservableObject {
         if let url = components.url, NSWorkspace.shared.open(url) == false {
             openCodex()
         }
+        pendingDropPrompt = nil
+        latestDrop = "拖入文件、网址或文字"
+        isDropTargeted = false
+        expandedForDrop = false
+        isExpanded = false
+        NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(1.3))
             guard let self else { return }
             if self.state == .jumping { self.state = .review }
-            self.pendingDropPrompt = nil
-            self.latestDrop = "拖入文件、网址或文字"
-            self.collapse()
         }
     }
 
@@ -407,14 +410,6 @@ final class NotchModel: ObservableObject {
         }
         if activeTasks != snapshot.tasks {
             activeTasks = snapshot.tasks
-            taskLayoutChanged = true
-        }
-        if snapshot.activeCount > 0, isExpanded || pendingDropPrompt != nil {
-            isExpanded = false
-            isDropTargeted = false
-            expandedForDrop = false
-            pendingDropPrompt = nil
-            latestDrop = "拖入文件、网址或文字"
             taskLayoutChanged = true
         }
         if snapshot.tasks.count < 2, isTaskStatusPinned {

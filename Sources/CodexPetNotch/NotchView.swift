@@ -21,7 +21,9 @@ struct NotchView: View {
         VStack(spacing: 0) {
             collapsedBar
 
-            if model.isShowingSettings {
+            if model.isExpanded {
+                EmptyView()
+            } else if model.isShowingSettings {
                 settingsContent
             } else if let task = model.waitingTask {
                 confirmationCard(task)
