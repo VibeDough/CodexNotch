@@ -691,21 +691,6 @@ private struct EdgeGlowBorder: View {
                 let angle = timeline.date.timeIntervalSinceReferenceDate
                     .truncatingRemainder(dividingBy: 2.8) / 2.8 * 360
                 glowShape(angle: angle)
-                    .mask {
-                        EdgeTaperMask()
-                            .fill(
-                                LinearGradient(
-                                    stops: [
-                                        .init(color: .clear, location: 0),
-                                        .init(color: .white.opacity(0.2), location: 0.012),
-                                        .init(color: .white.opacity(0.7), location: 0.032),
-                                        .init(color: .white, location: 0.06)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                    }
             }
         }
         .allowsHitTesting(false)
@@ -726,12 +711,18 @@ private struct EdgeGlowBorder: View {
                 .shadow(color: color.opacity(0.65), radius: 2.8)
                 .padding(1.4)
         } else {
-            IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
-                .stroke(
-                    style,
-                    style: StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round)
-                )
-                .shadow(color: color.opacity(0.65), radius: 2.8)
+            ZStack {
+                IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12)
+                    .stroke(
+                        style,
+                        style: StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round)
+                    )
+                    .mask { EdgeBodyMask(tipHeight: 14).fill(.white) }
+
+                EdgeTaperTips(tipHeight: 14, baseWidth: 2.7)
+                    .fill(style)
+            }
+            .shadow(color: color.opacity(0.65), radius: 2.8)
         }
     }
 }
@@ -766,31 +757,36 @@ private struct IslandEdgeShape: Shape {
     }
 }
 
-private struct EdgeTaperMask: Shape {
+private struct EdgeBodyMask: Shape {
+    let tipHeight: CGFloat
+
     func path(in rect: CGRect) -> Path {
-        let fullWidthStart = min(rect.height * 0.09, 14)
-        let fadeOutY: CGFloat = 0
-        let maskWidth: CGFloat = 3.5
+        Path(CGRect(
+            x: rect.minX,
+            y: min(tipHeight, rect.height),
+            width: rect.width,
+            height: max(0, rect.height - tipHeight)
+        ))
+    }
+}
+
+private struct EdgeTaperTips: Shape {
+    let tipHeight: CGFloat
+    let baseWidth: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let height = min(tipHeight, rect.height)
         var path = Path()
 
-        // Converge beyond the stroke center so the final pixels visibly taper.
-        path.move(to: CGPoint(x: rect.minX, y: fadeOutY))
-        path.addLine(to: CGPoint(x: 0, y: fullWidthStart))
-        path.addLine(to: CGPoint(x: maskWidth, y: fullWidthStart))
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + height))
+        path.addLine(to: CGPoint(x: rect.minX + baseWidth, y: rect.minY + height))
         path.closeSubpath()
 
-        path.move(to: CGPoint(x: rect.maxX, y: fadeOutY))
-        path.addLine(to: CGPoint(x: rect.maxX - maskWidth, y: fullWidthStart))
-        path.addLine(to: CGPoint(x: rect.maxX, y: fullWidthStart))
+        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - baseWidth, y: rect.minY + height))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + height))
         path.closeSubpath()
-
-        // Keep both lower corners and the complete bottom edge fully visible.
-        path.addRect(CGRect(
-            x: rect.minX,
-            y: fullWidthStart,
-            width: rect.width,
-            height: rect.maxY - fullWidthStart
-        ))
         return path
     }
 }
