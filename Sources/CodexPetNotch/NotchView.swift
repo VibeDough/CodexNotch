@@ -134,7 +134,7 @@ struct NotchView: View {
                 .opacity(model.isHovered ? 0 : 1)
 
                 if model.isHovered {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 8) {
                         Button(action: model.toggleSettings) {
                             Image(systemName: "gearshape.fill")
                                 .font(.system(size: 12, weight: .semibold))
@@ -157,7 +157,7 @@ struct NotchView: View {
                         .buttonStyle(.plain)
                         .help("退出")
                     }
-                    .frame(width: 60, height: 28)
+                    .frame(width: 64, height: 28)
                     .transition(.scale(scale: 0.86, anchor: .trailing).combined(with: .opacity))
                 }
             }
