@@ -39,6 +39,7 @@ private struct PendingCompletion {
     let key: String
     let task: CodexTaskItem
     let message: String
+    let eventDate: Date
 }
 
 @MainActor
@@ -446,6 +447,9 @@ final class NotchModel: ObservableObject {
         if let completedTask = snapshot.completedTask, activity.phase == .completed {
             enqueueCompletion(completedTask, message: activity.label, eventDate: activity.eventDate)
         }
+        if let viewedThread = snapshot.viewedThread {
+            acknowledgeViewedCompletion(viewedThread)
+        }
         if taskLayoutChanged {
             NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
         }
@@ -522,7 +526,19 @@ final class NotchModel: ObservableObject {
         let key = "\(task.id)|\(eventDate.timeIntervalSince1970)"
         guard !acknowledgedCompletionKeys.contains(key),
               !pendingCompletions.contains(where: { $0.key == key }) else { return }
-        pendingCompletions.append(PendingCompletion(key: key, task: task, message: message))
+        pendingCompletions.append(PendingCompletion(key: key, task: task, message: message, eventDate: eventDate))
+        showNextCompletion()
+    }
+
+    private func acknowledgeViewedCompletion(_ viewedThread: CodexViewedThread) {
+        let viewed = pendingCompletions.filter {
+            $0.task.id == viewedThread.id && $0.eventDate <= viewedThread.viewedAt
+        }
+        guard !viewed.isEmpty else { return }
+        acknowledgedCompletionKeys.formUnion(viewed.map(\.key))
+        pendingCompletions.removeAll { completion in
+            viewed.contains { $0.key == completion.key }
+        }
         showNextCompletion()
     }
 

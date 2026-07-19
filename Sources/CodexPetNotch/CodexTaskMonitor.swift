@@ -15,6 +15,12 @@ struct CodexStatusSnapshot {
     let todayTokens: Int
     let usageLimit: CodexUsageLimit?
     let completedTask: CodexTaskItem?
+    let viewedThread: CodexViewedThread?
+}
+
+struct CodexViewedThread {
+    let id: String
+    let viewedAt: Date
 }
 
 struct CodexUsageLimit: Equatable {
@@ -45,23 +51,69 @@ final class CodexTaskMonitor: @unchecked Sendable {
     private var cachedUsageLimit: CodexUsageLimit?
     private var tokenCacheDate = Date.distantPast
     private var pendingConfirmations: [String: MonitoredRollout] = [:]
+    private var cachedDesktopLogURL: URL?
 
     func latestSnapshot() -> CodexStatusSnapshot {
         let observedRollouts = newestRollouts().compactMap(activity(for:))
         let rollouts = reconciledRollouts(observedRollouts)
         let usageStats = todayUsageStats()
+        let viewedThread = latestViewedThread()
         let activePhases: [CodexActivity.Phase] = [.running, .review, .waiting]
         let tasks = rollouts.filter { activePhases.contains($0.activity.phase) }.map(\.task)
         if let completion = rollouts.first(where: {
             $0.activity.phase == .completed && Date().timeIntervalSince($0.activity.eventDate) < 8
         }) {
-            return CodexStatusSnapshot(primary: completion.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: completion.task)
+            return CodexStatusSnapshot(primary: completion.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: completion.task, viewedThread: viewedThread)
         }
         if let active = rollouts.first(where: { [.running, .review, .waiting, .failed].contains($0.activity.phase) }) {
-            return CodexStatusSnapshot(primary: active.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil)
+            return CodexStatusSnapshot(primary: active.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: viewedThread)
         }
         let idle = CodexActivity(phase: .idle, label: "Codex 空闲", eventDate: .distantPast, startedAt: nil)
-        return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil)
+        return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: viewedThread)
+    }
+
+    private func latestViewedThread() -> CodexViewedThread? {
+        guard let logURL = desktopLogURL(),
+              let handle = try? FileHandle(forReadingFrom: logURL) else { return nil }
+        defer { try? handle.close() }
+        let length = (try? handle.seekToEnd()) ?? 0
+        let sampleSize: UInt64 = 80_000
+        try? handle.seek(toOffset: length > sampleSize ? length - sampleSize : 0)
+        let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
+        let pattern = #"thread_stream_view_activity_changed active=true conversationId=([0-9a-f-]+).*rendererWindowFocused=true"#
+        guard let expression = try? NSRegularExpression(pattern: pattern) else { return nil }
+        for line in text.split(separator: "\n").reversed() {
+            let value = String(line)
+            let range = NSRange(value.startIndex..., in: value)
+            guard let match = expression.firstMatch(in: value, range: range),
+                  let idRange = Range(match.range(at: 1), in: value),
+                  let timestamp = value.split(separator: " ", maxSplits: 1).first,
+                  let viewedAt = Self.parseDate(String(timestamp)) else { continue }
+            return CodexViewedThread(id: String(value[idRange]), viewedAt: viewedAt)
+        }
+        return nil
+    }
+
+    private func desktopLogURL() -> URL? {
+        if let cachedDesktopLogURL,
+           FileManager.default.fileExists(atPath: cachedDesktopLogURL.path) {
+            return cachedDesktopLogURL
+        }
+        let logsURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/com.openai.codex", isDirectory: true)
+        guard let enumerator = FileManager.default.enumerator(
+            at: logsURL,
+            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+        var newest: (url: URL, date: Date)?
+        for case let url as URL in enumerator where url.pathExtension == "log" {
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
+            guard values?.isRegularFile == true, let date = values?.contentModificationDate else { continue }
+            if newest == nil || date > newest!.date { newest = (url, date) }
+        }
+        cachedDesktopLogURL = newest?.url
+        return cachedDesktopLogURL
     }
 
     private func reconciledRollouts(_ observed: [MonitoredRollout]) -> [MonitoredRollout] {
