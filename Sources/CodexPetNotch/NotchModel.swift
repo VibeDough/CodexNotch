@@ -75,7 +75,7 @@ final class NotchModel: ObservableObject {
         pendingHoverValue = hovered
         hoverTask?.cancel()
         hoverTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: hovered ? .milliseconds(120) : .milliseconds(150))
+            try? await Task.sleep(for: hovered ? .milliseconds(70) : .milliseconds(140))
             guard !Task.isCancelled, let self, self.isHovered != hovered else { return }
             self.pendingHoverValue = nil
             self.isHovered = hovered

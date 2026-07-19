@@ -34,6 +34,10 @@ struct NotchView: View {
                 persistentTaskStatus(task)
             } else if showsUsageDetails {
                 tokenDetails
+                    .transition(.asymmetric(
+                        insertion: .offset(y: -7).combined(with: .opacity),
+                        removal: .offset(y: -4).combined(with: .opacity)
+                    ))
             } else if let message = model.visibleCompletionMessage {
                 completionBubble(message)
                     .transition(.asymmetric(
@@ -49,7 +53,7 @@ struct NotchView: View {
                     .transition(.scale(scale: 0.92, anchor: .top).combined(with: .opacity))
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .top)
         .background {
             if model.usesCompactBar && !showsDetails && !model.isExpanded {
                 Capsule().fill(.black)
@@ -71,12 +75,14 @@ struct NotchView: View {
         .overlay { edgeStatusGlow }
         .animation(.spring(response: 0.34, dampingFraction: 0.72), value: model.completionMessage)
         .animation(.spring(response: 0.3, dampingFraction: 0.82), value: model.isExpanded)
+        .animation(.spring(response: 0.28, dampingFraction: 0.88), value: showsUsageDetails)
         .onChange(of: model.isDropTargeted) { _, targeted in
             model.setDropTargeted(targeted)
         }
         .onDrop(of: [UTType.fileURL, UTType.url, UTType.utf8PlainText], isTargeted: $model.isDropTargeted) {
             model.receive(providers: $0)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var collapsedBar: some View {
@@ -143,7 +149,7 @@ struct NotchView: View {
                         .help("退出")
                     }
                     .frame(width: 60, height: 28)
-                    .transition(.opacity)
+                    .transition(.scale(scale: 0.86, anchor: .trailing).combined(with: .opacity))
                 }
             }
             .frame(width: 68, height: 28)

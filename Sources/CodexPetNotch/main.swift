@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var panel: NotchPanel?
     private var environmentTimer: Timer?
     private var hoverTimer: Timer?
+    private var pendingResizeTask: Task<Void, Never>?
     private let model = NotchModel()
     private let preferences = AppPreferences()
 
@@ -170,9 +171,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             height: newSize.height
         )
         guard !panel.frame.equalTo(frame) else { return }
+        pendingResizeTask?.cancel()
+        if newSize.height < panel.frame.height {
+            pendingResizeTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(190))
+                guard !Task.isCancelled else { return }
+                self?.applyCurrentFrame()
+            }
+            return
+        }
         // Keep the physical top edge pixel-locked. Animating the panel origin and
         // height together can expose a one-frame seam below the camera housing.
         panel.setFrame(frame, display: true)
+    }
+
+    private func applyCurrentFrame() {
+        guard let panel, let screen = preferences.targetScreen() else { return }
+        let size = notchSize(expanded: model.isExpanded, on: screen)
+        let topInset: CGFloat = screen.safeAreaInsets.top <= 0 ? 4 : 0
+        panel.setFrame(NSRect(
+            x: screen.frame.midX - size.width / 2,
+            y: screen.frame.maxY - size.height - topInset,
+            width: size.width,
+            height: size.height
+        ), display: true)
     }
 
     func windowDidResignKey(_ notification: Notification) { model.collapse() }
