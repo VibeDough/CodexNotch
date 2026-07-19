@@ -27,13 +27,13 @@ struct NotchView: View {
                 settingsContent
             } else if let task = model.waitingTask {
                 confirmationCard(task)
-            } else if let message = model.visibleCompletionMessage,
-                      let task = model.completedTask {
-                completedTaskStatus(message: message, task: task)
             } else if showsTaskDetails {
                 taskDetails
             } else if let task = model.primaryTask {
                 persistentTaskStatus(task)
+            } else if let message = model.visibleCompletionMessage,
+                      let task = model.completedTask {
+                completedTaskStatus(message: message, task: task)
             } else if model.activeTasks.isEmpty,
                       model.visibleCompletionMessage == nil,
                       !model.isExpanded {

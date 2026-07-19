@@ -228,9 +228,9 @@ final class NotchModel: ObservableObject {
         if isExpanded { return .drop }
         if isShowingSettings { return .settings }
         if waitingTask != nil { return .waiting }
-        if visibleCompletionMessage != nil { return .completion }
         if isTaskStatusPinned, activeTasks.count > 1 { return .taskList(activeTasks.count) }
         if primaryTask != nil { return .task }
+        if visibleCompletionMessage != nil { return .completion }
         if isHovered { return .usage }
         return usesCompactBar ? .compactIdle : .idle
     }
