@@ -26,6 +26,7 @@ final class NotchModel: ObservableObject {
     @Published var usesCompactBar = false
     @Published var connectionState: CodexConnectionState = .connected
     @Published var isHovered = false
+    @Published var isHoverContentVisible = false
     @Published var isDropTargeted = false
     @Published var latestDrop = "拖入文件、网址或文字"
     @Published var pendingDropPrompt: String?
@@ -79,8 +80,21 @@ final class NotchModel: ObservableObject {
             try? await Task.sleep(for: hovered ? .milliseconds(70) : .milliseconds(140))
             guard !Task.isCancelled, let self, self.isHovered != hovered else { return }
             self.pendingHoverValue = nil
-            self.isHovered = hovered
-            NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
+            if hovered {
+                // Grow the opaque panel first, then reveal usage content.
+                self.isHovered = true
+                NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
+                try? await Task.sleep(for: .milliseconds(34))
+                guard !Task.isCancelled, self.isHovered else { return }
+                self.isHoverContentVisible = true
+            } else {
+                // Hide content while the panel is still full-size, then collapse it.
+                self.isHoverContentVisible = false
+                try? await Task.sleep(for: .milliseconds(34))
+                guard !Task.isCancelled else { return }
+                self.isHovered = false
+                NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
+            }
         }
     }
 
@@ -222,6 +236,7 @@ final class NotchModel: ObservableObject {
         pendingHoverValue = nil
         hoverSuppressedUntil = Date().addingTimeInterval(0.8)
         isHovered = false
+        isHoverContentVisible = false
         completionMessage = nil
         completedTask = nil
         NotificationCenter.default.post(name: .notchSizeChanged, object: nil)

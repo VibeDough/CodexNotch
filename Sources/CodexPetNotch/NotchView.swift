@@ -10,7 +10,7 @@ struct NotchView: View {
     }
 
     private var showsUsageDetails: Bool {
-        model.isHovered && model.activeTasks.isEmpty
+        model.isHoverContentVisible && model.activeTasks.isEmpty
     }
 
     private var showsDetails: Bool {
@@ -109,6 +109,8 @@ struct NotchView: View {
             }
             .buttonStyle(.plain)
             .help("打开 Codex")
+            .scaleEffect(x: usesSmallIdleLayout ? 0.84 : 1, y: 1, anchor: .leading)
+            .offset(x: usesSmallIdleLayout ? -7 : 0)
 
             Spacer(minLength: 92)
 
@@ -184,6 +186,16 @@ struct NotchView: View {
             && !model.isShowingSettings
             && !model.isHovered
         return model.usesCompactBar ? 36 : (isIdle ? 38 : 44)
+    }
+
+    private var usesSmallIdleLayout: Bool {
+        !model.usesCompactBar
+            && model.activeTasks.isEmpty
+            && model.visibleCompletionMessage == nil
+            && model.waitingTask == nil
+            && !model.isHovered
+            && !model.isExpanded
+            && !model.isShowingSettings
     }
 
     @ViewBuilder
