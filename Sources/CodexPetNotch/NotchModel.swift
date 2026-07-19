@@ -78,6 +78,7 @@ final class NotchModel: ObservableObject {
     private var expandedForDrop = false
     private var pendingCompletions: [PendingCompletion] = []
     private var acknowledgedCompletionKeys: Set<String> = []
+    private var petStackPeakSinceCompletion = 0
     private var reconnectTask: Task<Void, Never>?
     private var wasCodexConnected: Bool?
     private let networkMonitor = NWPathMonitor()
@@ -533,18 +534,25 @@ final class NotchModel: ObservableObject {
         let key = "\(task.id)|\(eventDate.timeIntervalSince1970)"
         guard !acknowledgedCompletionKeys.contains(key),
               !pendingCompletions.contains(where: { $0.key == key }) else { return }
+        if pendingCompletions.isEmpty {
+            petStackPeakSinceCompletion = 0
+        }
         pendingCompletions.append(PendingCompletion(key: key, task: task, message: message, eventDate: eventDate))
         showNextCompletion()
     }
 
     private func reconcilePetCompletionStack(count: Int, updatedAt: Date) {
         let eligible = pendingCompletions.filter { $0.eventDate <= updatedAt }
-        let removalCount = max(0, eligible.count - count)
+        guard !eligible.isEmpty else { return }
+        let previousPeak = petStackPeakSinceCompletion
+        petStackPeakSinceCompletion = max(previousPeak, count)
+        let removalCount = min(eligible.count, max(0, previousPeak - count))
         guard removalCount > 0 else { return }
         let removed = Array(eligible.prefix(removalCount))
         let removedKeys = Set(removed.map(\.key))
         acknowledgedCompletionKeys.formUnion(removedKeys)
         pendingCompletions.removeAll { removedKeys.contains($0.key) }
+        petStackPeakSinceCompletion = count
         showNextCompletion()
     }
 
@@ -565,6 +573,7 @@ final class NotchModel: ObservableObject {
         completionMessage = pendingCompletions.first?.message
         if pendingCompletions.isEmpty {
             isCompletionStackCollapsed = false
+            petStackPeakSinceCompletion = 0
         }
         NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
     }
