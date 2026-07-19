@@ -116,11 +116,11 @@ struct NotchView: View {
                     } else if model.isHovered {
                         Text(model.activeTasks.isEmpty ? "用量" : "任务")
                     } else {
-                        Text("剩余 \(model.remainingUsageText)")
+                        Text(model.remainingUsageStatusText)
                     }
                 }
                 .font(.system(size: 10.5, weight: .bold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(collapsedUsageColor)
                 .fixedSize(horizontal: true, vertical: false)
                 .frame(width: 94, height: 30, alignment: .leading)
                 .contentShape(Rectangle().inset(by: -7))
@@ -204,6 +204,17 @@ struct NotchView: View {
             && !model.isShowingSettings
             && !model.isHovered
         return model.usesCompactBar ? 36 : (isIdle ? 38 : 44)
+    }
+
+    private var collapsedUsageColor: Color {
+        guard model.connectionState == .connected, !model.isHovered else {
+            return .white.opacity(0.9)
+        }
+        return switch model.remainingUsageLevel {
+        case .low: .orange
+        case .critical: .red
+        default: .white.opacity(0.9)
+        }
     }
 
     private var usesSmallIdleLayout: Bool {
@@ -384,7 +395,8 @@ struct NotchView: View {
             }
 
             HStack {
-                Label("剩余 \(model.remainingUsageText)", systemImage: "gauge.with.dots.needle.50percent")
+                Label(model.remainingUsageStatusText, systemImage: "gauge.with.dots.needle.50percent")
+                    .foregroundStyle(expandedUsageColor)
                 Spacer()
                 Text("版本 \(model.codexVersion)")
             }
@@ -393,6 +405,14 @@ struct NotchView: View {
         }
         .padding(.horizontal, 13)
         .padding(.bottom, 11)
+    }
+
+    private var expandedUsageColor: Color {
+        switch model.remainingUsageLevel {
+        case .low: .orange
+        case .critical: .red
+        default: .white.opacity(0.56)
+        }
     }
 
     private func phaseText(_ phase: CodexActivity.Phase) -> String {

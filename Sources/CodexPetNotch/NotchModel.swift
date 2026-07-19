@@ -13,6 +13,13 @@ enum CodexConnectionState {
     case reconnected
 }
 
+enum UsageRemainingLevel {
+    case normal
+    case low
+    case critical
+    case unavailable
+}
+
 @MainActor
 final class NotchModel: ObservableObject {
     @Published var state: PetState = .idle {
@@ -142,8 +149,28 @@ final class NotchModel: ObservableObject {
     }
 
     var remainingUsageText: String {
-        guard let usageLimit else { return "--" }
-        return "\(max(0, Int(floor(100 - usageLimit.usedPercent))))%"
+        guard let remainingUsagePercent else { return "--" }
+        return "\(remainingUsagePercent)%"
+    }
+
+    var remainingUsageStatusText: String {
+        switch remainingUsageLevel {
+        case .low: "余量不多 \(remainingUsageText)"
+        case .critical: "即将用尽 \(remainingUsageText)"
+        default: "剩余 \(remainingUsageText)"
+        }
+    }
+
+    var remainingUsageLevel: UsageRemainingLevel {
+        guard let remainingUsagePercent else { return .unavailable }
+        if remainingUsagePercent < 20 { return .critical }
+        if remainingUsagePercent < 50 { return .low }
+        return .normal
+    }
+
+    private var remainingUsagePercent: Int? {
+        guard let usageLimit else { return nil }
+        return max(0, Int(floor(100 - usageLimit.usedPercent)))
     }
 
     var usageProgress: Double {
