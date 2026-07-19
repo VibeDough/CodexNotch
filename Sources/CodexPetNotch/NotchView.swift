@@ -796,11 +796,12 @@ private struct EdgeGlowBorder: View {
     let color: Color
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: !animated)) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !animated)) { timeline in
             Canvas { context, size in
                 let angle = timeline.date.timeIntervalSinceReferenceDate
                     .truncatingRemainder(dividingBy: 2.8) / 2.8 * 360
-                let rect = CGRect(origin: .zero, size: size).insetBy(dx: 1.4, dy: 1.4)
+                let bounds = CGRect(origin: .zero, size: size)
+                let rect = compact ? bounds.insetBy(dx: 1.4, dy: 1.4) : bounds
                 let path = compact
                     ? Capsule().path(in: rect)
                     : IslandEdgeShape(shoulder: 0, bottomRadius: expanded ? 18 : 12).path(in: rect)
