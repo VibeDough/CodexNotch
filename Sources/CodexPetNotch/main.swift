@@ -184,7 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return NSSize(width: 450, height: 86)
         }
         if model.isTaskStatusPinned, !model.activeTasks.isEmpty {
-            return NSSize(width: 450, height: 52 + CGFloat(model.activeTasks.count * 40))
+            return NSSize(width: 450, height: 80 + CGFloat(model.activeTasks.count * 40))
         }
         if model.primaryTask != nil {
             return NSSize(width: 450, height: 86)

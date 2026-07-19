@@ -260,6 +260,20 @@ struct NotchView: View {
                     Divider().overlay(.white.opacity(0.08))
                 }
             }
+
+            Button { model.toggleTaskStatusPinned() } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 8.5, weight: .black))
+                    Text("收起任务")
+                        .font(.system(size: 9.5, weight: .bold))
+                }
+                .foregroundStyle(.white.opacity(0.62))
+                .frame(maxWidth: .infinity, minHeight: 28)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("收起任务列表")
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
