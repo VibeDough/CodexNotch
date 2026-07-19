@@ -164,9 +164,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         let visibleSize = notchSize(expanded: expanded, on: screen)
         guard screen.safeAreaInsets.top > 0 else { return visibleSize }
+        let taskListCanvasHeight = model.activeTasks.count > 1
+            ? 80 + CGFloat(model.activeTasks.count * 40)
+            : 138
         return NSSize(
             width: max(450, visibleSize.width),
-            height: max(138, visibleSize.height)
+            height: max(taskListCanvasHeight, visibleSize.height)
         )
     }
 
