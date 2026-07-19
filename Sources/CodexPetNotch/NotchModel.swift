@@ -95,7 +95,10 @@ final class NotchModel: ObservableObject {
     }
 
     func toggleTaskStatusPinned() {
-        guard activeTaskCount > 0 else { return }
+        guard activeTasks.count > 1 else {
+            isTaskStatusPinned = false
+            return
+        }
         isTaskStatusPinned.toggle()
         NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
     }
@@ -329,7 +332,7 @@ final class NotchModel: ObservableObject {
             activeTasks = snapshot.tasks
             taskLayoutChanged = true
         }
-        if snapshot.activeCount == 0, isTaskStatusPinned {
+        if snapshot.tasks.count < 2, isTaskStatusPinned {
             isTaskStatusPinned = false
             taskLayoutChanged = true
         }

@@ -149,7 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if model.visibleCompletionMessage != nil, model.completedTask != nil {
             return NSSize(width: 450, height: 86)
         }
-        if model.isTaskStatusPinned, !model.activeTasks.isEmpty {
+        if model.isTaskStatusPinned, model.activeTasks.count > 1 {
             return NSSize(width: 450, height: 80 + CGFloat(model.activeTasks.count * 40))
         }
         if model.primaryTask != nil {

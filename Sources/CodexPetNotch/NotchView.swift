@@ -6,7 +6,7 @@ struct NotchView: View {
     @ObservedObject var model: NotchModel
 
     private var showsTaskDetails: Bool {
-        model.isTaskStatusPinned && !model.activeTasks.isEmpty
+        model.isTaskStatusPinned && model.activeTasks.count > 1
     }
 
     private var showsUsageDetails: Bool {
@@ -113,7 +113,7 @@ struct NotchView: View {
 
             ZStack {
                 Group {
-                    if model.primaryTask != nil {
+                    if model.activeTasks.count > 1 {
                         Button { model.toggleTaskStatusPinned() } label: { taskStatus }
                             .buttonStyle(.plain)
                             .help(model.isTaskStatusPinned ? "取消常驻任务" : "常驻显示任务")
@@ -158,8 +158,10 @@ struct NotchView: View {
         .frame(height: collapsedBarHeight)
         .contentShape(Rectangle())
         .onTapGesture {
-            if model.activeTaskCount > 0 {
+            if model.activeTasks.count > 1 {
                 model.toggleTaskStatusPinned()
+            } else if let task = model.primaryTask {
+                model.openTask(task)
             } else {
                 model.toggleExpanded()
             }
@@ -276,19 +278,21 @@ struct NotchView: View {
                 }
             }
 
-            Button { model.toggleTaskStatusPinned() } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "chevron.up")
-                        .font(.system(size: 8.5, weight: .black))
-                    Text("收起任务")
-                        .font(.system(size: 9.5, weight: .bold))
+            if model.activeTasks.count > 1 {
+                Button { model.toggleTaskStatusPinned() } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "chevron.up")
+                            .font(.system(size: 8.5, weight: .black))
+                        Text("收起任务")
+                            .font(.system(size: 9.5, weight: .bold))
+                    }
+                    .foregroundStyle(.white.opacity(0.62))
+                    .frame(maxWidth: .infinity, minHeight: 28)
+                    .contentShape(Rectangle())
                 }
-                .foregroundStyle(.white.opacity(0.62))
-                .frame(maxWidth: .infinity, minHeight: 28)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .help("收起任务列表")
             }
-            .buttonStyle(.plain)
-            .help("收起任务列表")
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
@@ -427,7 +431,13 @@ struct NotchView: View {
     }
 
     private func persistentTaskStatus(_ task: CodexTaskItem) -> some View {
-        Button { model.toggleTaskStatusPinned() } label: {
+        Button {
+            if model.activeTasks.count > 1 {
+                model.toggleTaskStatusPinned()
+            } else {
+                model.openTask(task)
+            }
+        } label: {
             HStack(spacing: 9) {
                 Circle()
                     .fill(statusColor(task.phase))
@@ -467,7 +477,7 @@ struct NotchView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(model.activeTaskCount > 1 ? "展开全部任务" : "展开任务详情")
+        .help(model.activeTaskCount > 1 ? "展开全部任务" : "返回 Codex 对话")
     }
 
     private func completedTaskStatus(message: String, task: CodexTaskItem) -> some View {
@@ -686,10 +696,9 @@ private struct EdgeGlowBorder: View {
                                 LinearGradient(
                                     stops: [
                                         .init(color: .clear, location: 0),
-                                        .init(color: .white.opacity(0.08), location: 0.015),
-                                        .init(color: .white.opacity(0.32), location: 0.07),
-                                        .init(color: .white.opacity(0.72), location: 0.2),
-                                        .init(color: .white, location: 0.34)
+                                        .init(color: .white.opacity(0.2), location: 0.012),
+                                        .init(color: .white.opacity(0.7), location: 0.032),
+                                        .init(color: .white, location: 0.06)
                                     ],
                                     startPoint: .top,
                                     endPoint: .bottom
@@ -758,7 +767,7 @@ private struct IslandEdgeShape: Shape {
 
 private struct EdgeTaperMask: Shape {
     func path(in rect: CGRect) -> Path {
-        let fullWidthStart = min(rect.height * 0.3, rect.height - 18)
+        let fullWidthStart = min(rect.height * 0.06, 8)
         let fadeOutY: CGFloat = 0
         let maskWidth: CGFloat = 3.5
         let leftStrokeCenter: CGFloat = 1.3
