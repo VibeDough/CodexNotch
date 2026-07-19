@@ -276,6 +276,7 @@ struct NotchView: View {
         .padding(.horizontal, 8)
         .frame(height: 24)
         .background(Color(red: 0.46, green: 0.9, blue: 0.59), in: Capsule())
+        .offset(y: 2)
         .accessibilityLabel("\(model.pendingCompletionCount) 个待查看任务")
     }
 
