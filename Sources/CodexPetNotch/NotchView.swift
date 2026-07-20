@@ -369,43 +369,6 @@ struct NotchView: View {
         .padding(.bottom, 8)
     }
 
-    private var usageDetails: some View {
-        VStack(spacing: 8) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("剩余额度")
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.5))
-                    Text(model.remainingUsageText)
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                }
-                Spacer()
-                Text(model.planText)
-                    .font(.system(size: 9.5, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.5))
-            }
-
-            GeometryReader { proxy in
-                Capsule().fill(.white.opacity(0.1))
-                Capsule()
-                    .fill(model.usageProgress < 0.2 ? .orange : .white)
-                    .frame(width: proxy.size.width * model.usageProgress)
-            }
-            .frame(height: 4)
-
-            HStack {
-                Label("重置 \(model.resetCountdownText)", systemImage: "clock")
-                Spacer()
-                Text("版本 \(model.codexVersion)")
-            }
-            .font(.system(size: 9.5, weight: .medium))
-            .foregroundStyle(.white.opacity(0.58))
-        }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 10)
-    }
-
     private var tokenDetails: some View {
         VStack(spacing: 9) {
             HStack(alignment: .bottom) {

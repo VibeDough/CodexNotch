@@ -325,7 +325,8 @@ final class CodexTaskMonitor: @unchecked Sendable {
         var lastEventDate = modified
         var completionDate: Date?
         var taskStartedAt: Date?
-        var sessionID = file.deletingPathExtension().lastPathComponent
+        var sessionID = Self.sessionID(from: file)
+            ?? file.deletingPathExtension().lastPathComponent
         var project = "Codex"
         var model = "未知模型"
         var effort = "未提供"
@@ -378,6 +379,9 @@ final class CodexTaskMonitor: @unchecked Sendable {
                 break
             }
         }
+        if lastPhase == .completed {
+            lastLabel = lastMessage.map(Self.summary) ?? "任务完成"
+        }
         let activity = CodexActivity(
             phase: lastPhase,
             label: lastLabel,
@@ -389,8 +393,8 @@ final class CodexTaskMonitor: @unchecked Sendable {
             title: threadMetadata[sessionID].map { Self.shortText($0.title, limit: 24) }
                 ?? Self.taskTitle(lastUserMessage)
                 ?? project,
-            detail: threadMetadata[sessionID].map { Self.shortText($0.description, limit: 38) }
-                ?? Self.taskTitle(lastUserMessage)
+            detail: lastMessage.map(Self.summary)
+                ?? threadMetadata[sessionID].map { Self.shortText($0.description, limit: 38) }
                 ?? project,
             project: project,
             model: model,
@@ -399,6 +403,13 @@ final class CodexTaskMonitor: @unchecked Sendable {
             startedAt: taskStartedAt
         )
         return MonitoredRollout(activity: activity, task: task)
+    }
+
+    private static func sessionID(from file: URL) -> String? {
+        let name = file.deletingPathExtension().lastPathComponent
+        let pattern = #"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"#
+        guard let range = name.range(of: pattern, options: .regularExpression) else { return nil }
+        return String(name[range])
     }
 
     private static func taskTitle(_ message: String?) -> String? {
