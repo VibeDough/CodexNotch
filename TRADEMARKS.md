@@ -18,6 +18,8 @@ The GNU General Public License v3.0 applies to the CodexNotch source code. It do
 
 Publicly distributed forks should use a distinct product name and icon and should state clearly that they are unofficial and not endorsed by 49Labs.
 
+Official CodexNotch releases are published by the `49LabsDev` GitHub organization from [github.com/49LabsDev/CodexNotch](https://github.com/49LabsDev/CodexNotch). Builds published elsewhere are not official unless 49Labs states otherwise.
+
 This policy does not limit rights that applicable law grants independently, such as nominative fair use.
 
 For brand-permission questions, open an issue in the official repository without including confidential information.
