@@ -107,8 +107,8 @@ struct NotchView: View {
                         Image(systemName: "wifi.exclamationmark")
                         Text("正在重连")
                     } else if model.connectionState == .reconnected {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                        Text("已重连")
+                        Image(systemName: "checkmark.circle.fill")
+                            .help("已重连")
                     } else {
                         Text(model.remainingUsageText)
                             .font(.system(size: 13, weight: .black, design: .rounded))
