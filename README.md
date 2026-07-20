@@ -2,7 +2,7 @@
 
 一个在 MacBook 刘海区域展示 Codex 任务、用量和连接状态的轻量 macOS 应用。
 
-[产品主页](https://vibedough.github.io/49agent-notch/) · [产品文档](docs/PRODUCT.md) · [视频演示指南](docs/VIDEO_DEMO_GUIDE.md)
+[宣传页源码](docs/index.html) · [产品文档](docs/PRODUCT.md) · [视频演示指南](docs/VIDEO_DEMO_GUIDE.md)
 
 当前版本支持：
 
