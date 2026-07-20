@@ -10,6 +10,37 @@ enum CoexistenceMode: String {
     case menuBarOnly
 }
 
+enum AppLanguage: String, CaseIterable {
+    case system
+    case chinese
+    case english
+
+    static var current: AppLanguage {
+        AppLanguage(rawValue: UserDefaults.standard.string(forKey: "appLanguage") ?? "") ?? .system
+    }
+
+    var usesEnglish: Bool {
+        switch self {
+        case .chinese: false
+        case .english: true
+        case .system:
+            !(Locale.preferredLanguages.first?.lowercased().hasPrefix("zh") ?? false)
+        }
+    }
+
+    static func text(_ chinese: String, _ english: String) -> String {
+        current.usesEnglish ? english : chinese
+    }
+
+    var displayName: String {
+        switch self {
+        case .system: AppLanguage.text("跟随系统", "System")
+        case .chinese: AppLanguage.text("中文", "Chinese")
+        case .english: "English"
+        }
+    }
+}
+
 @MainActor
 final class AppPreferences {
     private enum Key {

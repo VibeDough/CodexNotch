@@ -101,7 +101,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
         if let active = rollouts.first(where: { [.running, .review, .waiting, .failed].contains($0.activity.phase) }) {
             return CodexStatusSnapshot(primary: active.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
         }
-        let idle = CodexActivity(phase: .idle, label: "Codex 空闲", eventDate: .distantPast, startedAt: nil)
+        let idle = CodexActivity(phase: .idle, label: AppLanguage.text("Codex 空闲", "Codex idle"), eventDate: .distantPast, startedAt: nil)
         return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
     }
 
@@ -454,7 +454,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
         try? handle.seek(toOffset: length > sampleSize ? length - sampleSize : 0)
         let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
         var lastPhase: CodexActivity.Phase = .idle
-        var lastLabel = "Codex 空闲"
+        var lastLabel = AppLanguage.text("Codex 空闲", "Codex idle")
         var lastMessage: String?
         var lastEventDate = modified
         var completionDate: Date?
@@ -462,8 +462,8 @@ final class CodexTaskMonitor: @unchecked Sendable {
         var sessionID = Self.sessionID(from: file)
             ?? file.deletingPathExtension().lastPathComponent
         var project = "Codex"
-        var model = "未知模型"
-        var effort = "未提供"
+        var model = AppLanguage.text("未知模型", "Unknown model")
+        var effort = AppLanguage.text("未提供", "Unavailable")
         var totalTokens: Int?
         var lastUserMessage: String?
 
@@ -501,27 +501,27 @@ final class CodexTaskMonitor: @unchecked Sendable {
                     lastUserMessage = message
                 }
             case "task_started":
-                lastPhase = .running; lastLabel = "Codex 正在处理"; taskStartedAt = lastEventDate
+                lastPhase = .running; lastLabel = AppLanguage.text("Codex 正在处理", "Codex is working"); taskStartedAt = lastEventDate
             case "task_complete":
                 lastPhase = .completed
                 completionDate = lastEventDate
-                lastLabel = lastMessage.map(Self.summary) ?? "任务完成"
+                lastLabel = lastMessage.map(Self.summary) ?? AppLanguage.text("任务完成", "Task completed")
             case "agent_message":
                 if let message = payload["message"] as? String, !message.isEmpty {
                     lastMessage = message
                 }
             case "agent_reasoning":
-                if lastPhase != .completed { lastPhase = .review; lastLabel = "Codex 正在分析" }
+                if lastPhase != .completed { lastPhase = .review; lastLabel = AppLanguage.text("Codex 正在分析", "Codex is analyzing") }
             case "elicitation_request", "request_user_input", "approval_request":
-                lastPhase = .waiting; lastLabel = "等待你的确认"
+                lastPhase = .waiting; lastLabel = AppLanguage.text("等待你的确认", "Waiting for your confirmation")
             case "error", "turn_aborted":
-                lastPhase = .failed; lastLabel = "任务遇到问题"
+                lastPhase = .failed; lastLabel = AppLanguage.text("任务遇到问题", "Task encountered a problem")
             default:
                 break
             }
         }
         if lastPhase == .completed {
-            lastLabel = lastMessage.map(Self.summary) ?? "任务完成"
+            lastLabel = lastMessage.map(Self.summary) ?? AppLanguage.text("任务完成", "Task completed")
         }
         let activity = CodexActivity(
             phase: lastPhase,
@@ -585,7 +585,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
         let firstLine = message
             .split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .first { !$0.isEmpty } ?? "任务完成"
+            .first { !$0.isEmpty } ?? AppLanguage.text("任务完成", "Task completed")
         let plain = firstLine.replacingOccurrences(of: "**", with: "")
         return plain.count > 34 ? String(plain.prefix(34)) + "…" : plain
     }

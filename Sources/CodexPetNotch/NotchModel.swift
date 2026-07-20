@@ -57,7 +57,7 @@ final class NotchModel: ObservableObject {
     @Published var connectionState: CodexConnectionState = .connected
     @Published var isHovered = false
     @Published var isDropTargeted = false
-    @Published var latestDrop = "拖入文件、网址或文字"
+    @Published var latestDrop = AppLanguage.text("拖入文件、网址或文字", "Drop a file, URL, or text")
     @Published var pendingDropPrompt: String?
     @Published var clockTick = Date()
     @Published var activeTaskCount = 0
@@ -88,12 +88,12 @@ final class NotchModel: ObservableObject {
     private let codexStartedAt = NSRunningApplication
         .runningApplications(withBundleIdentifier: "com.openai.codex")
         .first?.launchDate ?? Date()
-    let codexVersion: String = {
+    var codexVersion: String {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.openai.codex"),
-              let bundle = Bundle(url: url) else { return "未知" }
-        return bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "未知"
-    }()
-    private var lastActivity = CodexActivity(phase: .idle, label: "Codex 空闲", eventDate: .distantPast, startedAt: nil)
+              let bundle = Bundle(url: url) else { return AppLanguage.text("未知", "Unknown") }
+        return bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? AppLanguage.text("未知", "Unknown")
+    }
+    private var lastActivity = CodexActivity(phase: .idle, label: AppLanguage.text("Codex 空闲", "Codex idle"), eventDate: .distantPast, startedAt: nil)
 
     init() {
         startNetworkMonitor()
@@ -133,6 +133,14 @@ final class NotchModel: ObservableObject {
         NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
     }
 
+    func refreshLanguage() {
+        if pendingDropPrompt == nil {
+            latestDrop = AppLanguage.text("拖入文件、网址或文字", "Drop a file, URL, or text")
+        }
+        objectWillChange.send()
+        NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
+    }
+
     func toggleTaskStatusPinned() {
         guard activeTasks.count > 1 else {
             isTaskStatusPinned = false
@@ -151,7 +159,7 @@ final class NotchModel: ObservableObject {
     func cancelPendingDrop() {
         dropExitTask?.cancel()
         pendingDropPrompt = nil
-        latestDrop = "拖入文件、网址或文字"
+        latestDrop = AppLanguage.text("拖入文件、网址或文字", "Drop a file, URL, or text")
         isDropTargeted = false
         expandedForDrop = false
         isExpanded = false
@@ -172,9 +180,9 @@ final class NotchModel: ObservableObject {
     var codexUptimeText: String {
         let seconds = max(0, Int(clockTick.timeIntervalSince(codexStartedAt)))
         if seconds >= 3600 {
-            return "运行 \(seconds / 3600)h\((seconds % 3600) / 60)m"
+            return AppLanguage.text("运行 ", "Running ") + "\(seconds / 3600)h\((seconds % 3600) / 60)m"
         }
-        return "运行 \(seconds / 60)m"
+        return AppLanguage.text("运行 ", "Running ") + "\(seconds / 60)m"
     }
 
     var todayTokenText: String {
@@ -196,9 +204,9 @@ final class NotchModel: ObservableObject {
 
     var remainingUsageStatusText: String {
         switch remainingUsageLevel {
-        case .low: "余量不多 \(remainingUsageText)"
-        case .critical: "即将用尽 \(remainingUsageText)"
-        default: "剩余 \(remainingUsageText)"
+        case .low: AppLanguage.text("余量不多 \(remainingUsageText)", "Low · \(remainingUsageText) left")
+        case .critical: AppLanguage.text("即将用尽 \(remainingUsageText)", "Critical · \(remainingUsageText) left")
+        default: AppLanguage.text("剩余 \(remainingUsageText)", "\(remainingUsageText) left")
         }
     }
 
@@ -220,13 +228,15 @@ final class NotchModel: ObservableObject {
     }
 
     var resetCountdownText: String {
-        guard let resetAt = usageLimit?.resetAt else { return "未提供" }
+        guard let resetAt = usageLimit?.resetAt else { return AppLanguage.text("未提供", "Unavailable") }
         let seconds = max(0, Int(resetAt.timeIntervalSince(clockTick)))
         let days = seconds / 86_400
         let hours = (seconds % 86_400) / 3_600
-        if days > 0 { return "\(days)天\(hours)小时" }
+        if days > 0 { return AppLanguage.text("\(days)天\(hours)小时", "\(days)d \(hours)h") }
         let minutes = (seconds % 3_600) / 60
-        return hours > 0 ? "\(hours)小时\(minutes)分" : "\(minutes)分钟"
+        return hours > 0
+            ? AppLanguage.text("\(hours)小时\(minutes)分", "\(hours)h \(minutes)m")
+            : AppLanguage.text("\(minutes)分钟", "\(minutes)m")
     }
 
     var planText: String {
@@ -268,7 +278,7 @@ final class NotchModel: ObservableObject {
         case .collapsedCompletion: CGSize(width: 322, height: 38)
         case .usage: CGSize(width: 450, height: 112)
         case .drop: CGSize(width: 450, height: 138)
-        case .settings: CGSize(width: 450, height: 138)
+        case .settings: CGSize(width: 450, height: 174)
         case .task: CGSize(width: 450, height: 86)
         case .taskWithCompletion: CGSize(width: 450, height: 122)
         case let .taskList(count): CGSize(width: 450, height: 80 + CGFloat(count * 40))
@@ -350,9 +360,9 @@ final class NotchModel: ObservableObject {
             if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
                 provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { [weak self] item, _ in
                     let url: URL? = (item as? URL) ?? (item as? Data).flatMap { URL(dataRepresentation: $0, relativeTo: nil) }
-                    let label = url?.lastPathComponent ?? "文件"
-                    let prompt = url.map { "请分析这个文件：\n\($0.path)" }
-                        ?? "请分析我刚刚拖入的文件。"
+                    let label = url?.lastPathComponent ?? AppLanguage.text("文件", "File")
+                    let prompt = url.map { AppLanguage.text("请分析这个文件：\n\($0.path)", "Please analyze this file:\n\($0.path)") }
+                        ?? AppLanguage.text("请分析我刚刚拖入的文件。", "Please analyze the file I just dropped.")
                     Task { @MainActor in self?.accept(label: label, prompt: prompt) }
                 }
                 return true
@@ -360,9 +370,9 @@ final class NotchModel: ObservableObject {
             if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
                 provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { [weak self] item, _ in
                     let url = item as? URL
-                    let label = url?.host ?? "网页链接"
-                    let prompt = url.map { "请打开并分析这个网页：\n\($0.absoluteString)" }
-                        ?? "请分析我刚刚拖入的网页链接。"
+                    let label = url?.host ?? AppLanguage.text("网页链接", "Web link")
+                    let prompt = url.map { AppLanguage.text("请打开并分析这个网页：\n\($0.absoluteString)", "Please open and analyze this webpage:\n\($0.absoluteString)") }
+                        ?? AppLanguage.text("请分析我刚刚拖入的网页链接。", "Please analyze the webpage I just dropped.")
                     Task { @MainActor in self?.accept(label: label, prompt: prompt) }
                 }
                 return true
@@ -371,10 +381,12 @@ final class NotchModel: ObservableObject {
                 provider.loadObject(ofClass: NSString.self) { [weak self] value, _ in
                     let text = (value as? NSString).map(String.init) ?? ""
                     let excerpt = String(text.prefix(12_000))
-                    let prompt = excerpt.isEmpty ? "请分析我刚刚拖入的文字。" : "请分析下面的内容：\n\n\(excerpt)"
+                    let prompt = excerpt.isEmpty
+                        ? AppLanguage.text("请分析我刚刚拖入的文字。", "Please analyze the text I just dropped.")
+                        : AppLanguage.text("请分析下面的内容：\n\n\(excerpt)", "Please analyze the following content:\n\n\(excerpt)")
                     Task { @MainActor in
                         self?.accept(
-                            label: text.isEmpty ? "文字" : String(text.prefix(32)),
+                            label: text.isEmpty ? AppLanguage.text("文字", "Text") : String(text.prefix(32)),
                             prompt: prompt
                         )
                     }
@@ -387,7 +399,7 @@ final class NotchModel: ObservableObject {
 
     private func accept(label: String, prompt: String) {
         pendingDropPrompt = prompt
-        latestDrop = "已准备：\(label)"
+        latestDrop = AppLanguage.text("已准备：\(label)", "Ready: \(label)")
         if !isExpanded { toggleExpanded() }
         state = .review
     }
@@ -397,17 +409,17 @@ final class NotchModel: ObservableObject {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(prompt, forType: .string)
-        latestDrop = "正在 Codex 新建对话"
+        latestDrop = AppLanguage.text("正在 Codex 新建对话", "Creating a new Codex conversation")
         state = .jumping
 
         guard let url = CodexDeepLink.newThread(prompt: prompt),
               NSWorkspace.shared.open(url) else {
-            latestDrop = "无法新建对话，请重试"
+            latestDrop = AppLanguage.text("无法新建对话，请重试", "Could not create a conversation. Try again.")
             state = .failed
             return
         }
         pendingDropPrompt = nil
-        latestDrop = "拖入文件、网址或文字"
+        latestDrop = AppLanguage.text("拖入文件、网址或文字", "Drop a file, URL, or text")
         isDropTargeted = false
         expandedForDrop = false
         isExpanded = false

@@ -4,6 +4,11 @@ import UniformTypeIdentifiers
 
 struct NotchView: View {
     @ObservedObject var model: NotchModel
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.system.rawValue
+
+    private func text(_ chinese: String, _ english: String) -> String {
+        (AppLanguage(rawValue: appLanguage) ?? .system).usesEnglish ? english : chinese
+    }
 
     private var showsTaskDetails: Bool {
         model.isTaskStatusPinned && model.activeTasks.count > 1
@@ -83,6 +88,7 @@ struct NotchView: View {
         .animation(.smooth(duration: 0.22), value: model.presentationMode)
         .animation(.smooth(duration: 0.22), value: model.completedTask?.id)
         .animation(.smooth(duration: 0.22), value: model.connectionState)
+        .onChange(of: appLanguage) { _, _ in model.refreshLanguage() }
         .onChange(of: model.isDropTargeted) { _, targeted in
             model.setDropTargeted(targeted)
         }
@@ -106,21 +112,21 @@ struct NotchView: View {
                             .foregroundStyle(.red)
                             .frame(width: 20, height: 20)
                             .offset(x: 8)
-                            .help("连接已断开")
+                            .help(text("连接已断开", "Disconnected"))
                     } else if model.connectionState == .reconnecting {
                         Image(systemName: "wifi.exclamationmark")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(.red)
                             .frame(width: 20, height: 20)
                             .offset(x: 8)
-                            .help("正在重连")
+                            .help(text("正在重连", "Reconnecting"))
                     } else if model.connectionState == .reconnected {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(.cyan)
                             .frame(width: 20, height: 20)
                             .offset(x: 8)
-                            .help("已重连")
+                            .help(text("已重连", "Reconnected"))
                     } else {
                         Text(model.remainingUsageText)
                             .font(.system(size: 13, weight: .black, design: .rounded))
@@ -133,7 +139,7 @@ struct NotchView: View {
                 .contentShape(Rectangle().inset(by: -7))
             }
             .buttonStyle(.plain)
-            .help("打开 Codex")
+            .help(text("打开 Codex", "Open Codex"))
 
             Spacer(minLength: 92)
 
@@ -144,15 +150,17 @@ struct NotchView: View {
                             completionCountBadge
                         }
                         .buttonStyle(.plain)
-                        .help("展开已完成任务")
+                        .help(text("展开已完成任务", "Show completed tasks"))
                     } else if model.activeTasks.count > 1 {
                         Button { model.toggleTaskStatusPinned() } label: { taskStatus }
                             .buttonStyle(.plain)
-                            .help(model.isTaskStatusPinned ? "取消常驻任务" : "常驻显示任务")
+                            .help(model.isTaskStatusPinned
+                                ? text("取消常驻任务", "Unpin task list")
+                                : text("常驻显示任务", "Pin task list"))
                     } else if let task = model.primaryTask {
                         Button { model.openTask(task) } label: { taskStatus }
                             .buttonStyle(.plain)
-                            .help("打开当前任务")
+                            .help(text("打开当前任务", "Open current task"))
                     } else {
                         taskStatus
                     }
@@ -174,7 +182,7 @@ struct NotchView: View {
                                 }
                         }
                         .buttonStyle(.plain)
-                        .help("设置")
+                        .help(text("设置", "Settings"))
 
                         Button {
                             NSApplication.shared.terminate(nil)
@@ -186,7 +194,7 @@ struct NotchView: View {
                                 .background(.white.opacity(0.09), in: Circle())
                         }
                         .buttonStyle(.plain)
-                        .help("退出")
+                        .help(text("退出", "Quit"))
                     }
                     .frame(width: 64, height: 28)
                     .transition(.scale(scale: 0.86, anchor: .trailing).combined(with: .opacity))
@@ -203,7 +211,7 @@ struct NotchView: View {
                 .stroke(model.isDropTargeted ? Color.white.opacity(0.75) : .clear, lineWidth: 1)
         }
         .contextMenu {
-            Button("退出") { NSApplication.shared.terminate(nil) }
+            Button(text("退出", "Quit")) { NSApplication.shared.terminate(nil) }
         }
     }
 
@@ -252,7 +260,7 @@ struct NotchView: View {
                 .offset(y: -1.5)
         }
         .frame(width: 68, height: 28, alignment: .trailing)
-        .accessibilityLabel("正在执行 \(model.activeTaskCount) 个任务")
+        .accessibilityLabel(text("正在执行 \(model.activeTaskCount) 个任务", "\(model.activeTaskCount) active tasks"))
     }
 
     private var completionCountBadge: some View {
@@ -269,17 +277,17 @@ struct NotchView: View {
         .background(Color(red: 0.46, green: 0.9, blue: 0.59), in: Capsule())
         .offset(y: 2)
         .frame(width: 68, height: 28, alignment: .trailing)
-        .accessibilityLabel("\(model.pendingCompletionCount) 个待查看任务")
+        .accessibilityLabel(text("\(model.pendingCompletionCount) 个待查看任务", "\(model.pendingCompletionCount) completed tasks to review"))
     }
 
     private var currentStatusText: String {
-        if model.connectionState == .reconnecting { return "正在重连" }
-        guard model.activeTaskCount > 0 else { return "空闲" }
+        if model.connectionState == .reconnecting { return text("正在重连", "Retry") }
+        guard model.activeTaskCount > 0 else { return text("空闲", "Idle") }
         return switch currentActivePhase {
-        case .waiting: "等待"
-        case .failed: "异常"
-        case .review: "分析"
-        default: "运行"
+        case .waiting: text("等待", "Wait")
+        case .failed: text("异常", "Issue")
+        case .review: text("分析", "Review")
+        default: text("运行", "Run")
         }
     }
 
@@ -333,7 +341,7 @@ struct NotchView: View {
                     .frame(height: 40)
                 }
                 .buttonStyle(.plain)
-                .help("返回 Codex 对话")
+                .help(text("返回 Codex 对话", "Return to Codex conversation"))
 
                 if task.id != model.activeTasks.last?.id {
                     Divider().overlay(.white.opacity(0.08))
@@ -345,7 +353,7 @@ struct NotchView: View {
                     HStack(spacing: 5) {
                         Image(systemName: "chevron.up")
                             .font(.system(size: 8.5, weight: .black))
-                        Text("收起任务")
+                        Text(text("收起任务", "Collapse tasks"))
                             .font(.system(size: 9.5, weight: .bold))
                     }
                     .foregroundStyle(.white.opacity(0.62))
@@ -353,7 +361,7 @@ struct NotchView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("收起任务列表")
+                .help(text("收起任务列表", "Collapse task list"))
             }
         }
         .padding(.horizontal, 12)
@@ -364,7 +372,7 @@ struct NotchView: View {
         VStack(spacing: 9) {
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("今日消耗")
+                    Text(text("今日消耗", "Today"))
                         .font(.system(size: 9.5, weight: .medium))
                         .foregroundStyle(.white.opacity(0.48))
                     Text(model.todayTokenText)
@@ -379,8 +387,8 @@ struct NotchView: View {
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity, minHeight: 34)
                 .allowsHitTesting(showsUsageDetails)
-                .accessibilityLabel("打开 Codex")
-                .help("打开 Codex")
+                .accessibilityLabel(text("打开 Codex", "Open Codex"))
+                .help(text("打开 Codex", "Open Codex"))
                 Spacer(minLength: 10)
                 Text(model.planText)
                     .font(.system(size: 10, weight: .semibold))
@@ -391,9 +399,9 @@ struct NotchView: View {
                 Label(model.remainingUsageStatusText, systemImage: "gauge.with.dots.needle.50percent")
                     .foregroundStyle(expandedUsageColor)
                 Spacer(minLength: 8)
-                Label("重置 \(model.resetCountdownText)", systemImage: "clock")
+                Label(text("重置 \(model.resetCountdownText)", "Resets in \(model.resetCountdownText)"), systemImage: "clock")
                 Spacer(minLength: 8)
-                Text("版本 \(model.codexVersion)")
+                Text(text("版本 \(model.codexVersion)", "Version \(model.codexVersion)"))
             }
             .font(.system(size: 9.5, weight: .medium))
             .foregroundStyle(.white.opacity(0.56))
@@ -411,19 +419,19 @@ struct NotchView: View {
     }
 
     private func phaseText(_ phase: CodexActivity.Phase) -> String {
-        if model.connectionState == .reconnecting { return "正在重连" }
+        if model.connectionState == .reconnecting { return text("正在重连", "Reconnecting") }
         return switch phase {
-        case .running: "运行中"
-        case .review: "分析中"
-        case .waiting: "等待确认"
-        case .completed: "已完成"
-        case .failed: "遇到问题"
-        case .idle: "空闲"
+        case .running: text("运行中", "Running")
+        case .review: text("分析中", "Analyzing")
+        case .waiting: text("等待确认", "Waiting")
+        case .completed: text("已完成", "Completed")
+        case .failed: text("遇到问题", "Issue")
+        case .idle: text("空闲", "Idle")
         }
     }
 
     private func taskUsageLine(_ task: CodexTaskItem) -> String {
-        let effort = "推理 \(effortText(task.effort))"
+        let effort = text("推理 \(effortText(task.effort))", "Reasoning \(effortText(task.effort))")
         guard let totalTokens = task.totalTokens else { return effort }
         return "\(effort) · \(compactTokenText(totalTokens)) Token"
     }
@@ -457,10 +465,10 @@ struct NotchView: View {
 
     private func effortText(_ value: String) -> String {
         switch value.lowercased() {
-        case "low": "轻度"
-        case "medium": "中度"
-        case "high": "高度"
-        case "xhigh": "极高"
+        case "low": text("轻度", "Low")
+        case "medium": text("中度", "Medium")
+        case "high": text("高度", "High")
+        case "xhigh": text("极高", "Extra high")
         default: value
         }
     }
@@ -519,7 +527,9 @@ struct NotchView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(model.activeTaskCount > 1 ? "展开全部任务" : "返回 Codex 对话")
+        .help(model.activeTaskCount > 1
+            ? text("展开全部任务", "Show all tasks")
+            : text("返回 Codex 对话", "Return to Codex conversation"))
     }
 
     private func completedTaskStatus(message: String, task: CodexTaskItem) -> some View {
@@ -543,7 +553,7 @@ struct NotchView: View {
                     .background(.white.opacity(0.1), in: Circle())
             }
             .buttonStyle(.plain)
-            .help("收起已完成任务")
+            .help(text("收起已完成任务", "Collapse completed tasks"))
             Button {
                 withAnimation(.smooth(duration: 0.22)) {
                     model.acknowledgeCompletedTask(task)
@@ -556,7 +566,7 @@ struct NotchView: View {
                     .background(Color(red: 0.72, green: 0.94, blue: 0.79), in: Circle())
             }
             .buttonStyle(.plain)
-            .help("查看已完成任务")
+            .help(text("查看已完成任务", "View completed task"))
         }
         .padding(.horizontal, 13)
         .frame(maxWidth: .infinity, minHeight: 42)
@@ -585,7 +595,7 @@ struct NotchView: View {
                     .background(.white.opacity(0.09), in: Circle())
             }
             .buttonStyle(.plain)
-            .help("收起已完成任务")
+            .help(text("收起已完成任务", "Collapse completed tasks"))
             Button {
                 withAnimation(.smooth(duration: 0.22)) {
                     model.acknowledgeCompletedTask(task)
@@ -598,7 +608,7 @@ struct NotchView: View {
                     .background(Color(red: 0.72, green: 0.94, blue: 0.79), in: Circle())
             }
             .buttonStyle(.plain)
-            .help("查看已完成任务")
+            .help(text("查看已完成任务", "View completed task"))
         }
         .padding(.horizontal, 13)
         .frame(maxWidth: .infinity, minHeight: 36)
@@ -617,7 +627,7 @@ struct NotchView: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                Text("等待确认 · 返回对话后继续")
+                Text(text("等待确认 · 返回对话后继续", "Waiting for confirmation · Return to continue"))
                     .font(.system(size: 9.5, weight: .medium))
                     .foregroundStyle(.white.opacity(0.55))
                     .lineLimit(1)
@@ -631,7 +641,7 @@ struct NotchView: View {
                     .background(.white.opacity(0.12), in: Circle())
             }
             .buttonStyle(.plain)
-            .help("返回对话")
+            .help(text("返回对话", "Return to conversation"))
 
             Button { model.openTask(task) } label: {
                 Image(systemName: "checkmark")
@@ -641,7 +651,7 @@ struct NotchView: View {
                     .background(Color(red: 0.72, green: 0.94, blue: 0.79), in: Circle())
             }
             .buttonStyle(.plain)
-            .help("前往确认")
+            .help(text("前往确认", "Open confirmation"))
         }
         .padding(.horizontal, 13)
         .frame(maxWidth: .infinity, minHeight: 48)
@@ -673,7 +683,9 @@ struct NotchView: View {
                         .frame(width: 28, height: 24)
                 }
                 .buttonStyle(.plain)
-                .help(model.pendingDropPrompt == nil ? "收起" : "取消")
+                .help(model.pendingDropPrompt == nil
+                    ? text("收起", "Collapse")
+                    : text("取消", "Cancel"))
             }
 
             if model.pendingDropPrompt != nil {
@@ -681,9 +693,9 @@ struct NotchView: View {
                     VStack(spacing: 2) {
                         HStack(spacing: 7) {
                             Image(systemName: "plus.message.fill")
-                            Text("在 Codex 新建对话")
+                            Text(text("在 Codex 新建对话", "New conversation in Codex"))
                         }
-                        Text("拖入其他内容可替换")
+                        Text(text("拖入其他内容可替换", "Drop something else to replace it"))
                             .font(.system(size: 8.5, weight: .semibold))
                             .foregroundStyle(.black.opacity(0.48))
                     }
@@ -696,7 +708,9 @@ struct NotchView: View {
             } else {
                 HStack(spacing: 7) {
                     Image(systemName: "arrow.down.doc.fill")
-                    Text(model.isDropTargeted ? "松开，交给 Codex" : "把文件、网址或文字拖到这里")
+                    Text(model.isDropTargeted
+                        ? text("松开，交给 Codex", "Release to send to Codex")
+                        : text("把文件、网址或文字拖到这里", "Drop a file, URL, or text here"))
                 }
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(model.isDropTargeted ? .white : .white.opacity(0.55))
@@ -712,14 +726,21 @@ struct NotchView: View {
 private struct NotchSettingsContent: View {
     @AppStorage("coexistenceMode") private var coexistenceMode = CoexistenceMode.automatic.rawValue
     @AppStorage("screenNumber") private var screenNumber = -1
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.system.rawValue
+
+    private func text(_ chinese: String, _ english: String) -> String {
+        (AppLanguage(rawValue: appLanguage) ?? .system).usesEnglish ? english : chinese
+    }
 
     var body: some View {
         VStack(spacing: 8) {
             settingRow(
                 icon: "rectangle.2.swap",
-                title: "共存",
-                detail: "检测到其他刘海应用时自动避让",
-                value: coexistenceMode == CoexistenceMode.alwaysShow.rawValue ? "始终显示" : "自动避让"
+                title: text("共存", "Coexistence"),
+                detail: text("检测到其他刘海应用时自动避让", "Avoid other notch apps"),
+                value: coexistenceMode == CoexistenceMode.alwaysShow.rawValue
+                    ? text("始终显示", "Always show")
+                    : text("自动避让", "Automatic")
             ) {
                 coexistenceMode = coexistenceMode == CoexistenceMode.automatic.rawValue
                     ? CoexistenceMode.alwaysShow.rawValue : CoexistenceMode.automatic.rawValue
@@ -727,17 +748,27 @@ private struct NotchSettingsContent: View {
 
             settingRow(
                 icon: "display",
-                title: "屏幕",
-                detail: "无刘海屏幕使用薄顶部胶囊",
+                title: text("屏幕", "Display"),
+                detail: text("无刘海屏幕使用薄顶部胶囊", "Slim capsule without a notch"),
                 value: selectedScreenName
             ) {
                 cycleScreen()
+            }
+
+            settingRow(
+                icon: "globe",
+                title: text("语言", "Language"),
+                detail: text("默认跟随 macOS 系统语言", "Follow macOS by default"),
+                value: selectedLanguage.displayName
+            ) {
+                cycleLanguage()
             }
         }
         .font(.system(size: 10.5, weight: .semibold))
         .foregroundStyle(.white.opacity(0.82))
         .onChange(of: coexistenceMode) { _, _ in notifyChange() }
         .onChange(of: screenNumber) { _, _ in notifyChange() }
+        .onChange(of: appLanguage) { _, _ in notifyChange() }
     }
 
     private func notifyChange() {
@@ -746,9 +777,22 @@ private struct NotchSettingsContent: View {
 
     private var selectedScreenName: String {
         guard screenNumber >= 0 else {
-            return NSScreen.screens.contains { $0.safeAreaInsets.top > 0 } ? "内建刘海屏" : "当前主屏"
+            return NSScreen.screens.contains { $0.safeAreaInsets.top > 0 }
+                ? text("内建刘海屏", "Built-in notch display")
+                : text("当前主屏", "Current main display")
         }
-        return NSScreen.screens.first { screenNumberValue($0) == screenNumber }?.localizedName ?? "当前主屏"
+        return NSScreen.screens.first { screenNumberValue($0) == screenNumber }?.localizedName
+            ?? text("当前主屏", "Current main display")
+    }
+
+    private var selectedLanguage: AppLanguage {
+        AppLanguage(rawValue: appLanguage) ?? .system
+    }
+
+    private func cycleLanguage() {
+        let languages = AppLanguage.allCases
+        let index = languages.firstIndex(of: selectedLanguage) ?? 0
+        appLanguage = languages[(index + 1) % languages.count].rawValue
     }
 
     private func cycleScreen() {
