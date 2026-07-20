@@ -38,6 +38,7 @@ struct CodexTaskItem: Identifiable, Equatable {
     let project: String
     let model: String
     let effort: String
+    let totalTokens: Int?
     let phase: CodexActivity.Phase
     let startedAt: Date?
 }
@@ -330,6 +331,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
         var project = "Codex"
         var model = "未知模型"
         var effort = "未提供"
+        var totalTokens: Int?
         var lastUserMessage: String?
 
         for line in text.split(separator: "\n") {
@@ -355,6 +357,12 @@ final class CodexTaskMonitor: @unchecked Sendable {
                 effort = (payload["effort"] as? String)
                     ?? (payload["reasoning_effort"] as? String)
                     ?? effort
+            case "token_count":
+                if let info = payload["info"] as? [String: Any],
+                   let usage = info["total_token_usage"] as? [String: Any],
+                   let total = usage["total_tokens"] as? NSNumber {
+                    totalTokens = total.intValue
+                }
             case "user_message":
                 if let message = payload["message"] as? String, !message.isEmpty {
                     lastUserMessage = message
@@ -399,6 +407,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
             project: project,
             model: model,
             effort: effort,
+            totalTokens: totalTokens,
             phase: lastPhase,
             startedAt: taskStartedAt
         )

@@ -345,7 +345,7 @@ struct NotchView: View {
                             Text(modelName(task.model))
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.78))
-                            Text("推理 \(effortText(task.effort))")
+                            Text(taskUsageLine(task))
                                 .font(.system(size: 9))
                                 .foregroundStyle(.white.opacity(0.45))
                         }
@@ -432,6 +432,22 @@ struct NotchView: View {
         }
     }
 
+    private func taskUsageLine(_ task: CodexTaskItem) -> String {
+        let effort = "推理 \(effortText(task.effort))"
+        guard let totalTokens = task.totalTokens else { return effort }
+        return "\(effort) · \(compactTokenText(totalTokens)) Token"
+    }
+
+    private func compactTokenText(_ tokens: Int) -> String {
+        if tokens >= 1_000_000 {
+            return String(format: "%.1fM", Double(tokens) / 1_000_000)
+        }
+        if tokens >= 1_000 {
+            return String(format: "%.1fK", Double(tokens) / 1_000)
+        }
+        return "\(tokens)"
+    }
+
     private func statusColor(_ phase: CodexActivity.Phase) -> Color {
         if model.connectionState == .disconnected || model.connectionState == .reconnecting { return .red }
         if model.connectionState == .reconnected { return .cyan }
@@ -502,7 +518,7 @@ struct NotchView: View {
                 }
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(modelName(task.model))
-                    Text("推理 \(effortText(task.effort))")
+                    Text(taskUsageLine(task))
                         .foregroundStyle(.white.opacity(0.45))
                 }
                 .font(.system(size: 9.5, weight: .semibold))
