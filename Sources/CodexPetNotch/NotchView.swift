@@ -101,13 +101,25 @@ struct NotchView: View {
             Button(action: model.openCodex) {
                 HStack(spacing: 5) {
                     if model.connectionState == .disconnected {
-                        Image(systemName: "link.slash")
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.red)
+                            .frame(width: 20, height: 20)
+                            .offset(x: 8)
                             .help("连接已断开")
                     } else if model.connectionState == .reconnecting {
                         Image(systemName: "wifi.exclamationmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.red)
+                            .frame(width: 20, height: 20)
+                            .offset(x: 8)
                             .help("正在重连")
                     } else if model.connectionState == .reconnected {
                         Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.cyan)
+                            .frame(width: 20, height: 20)
+                            .offset(x: 8)
                             .help("已重连")
                     } else {
                         Text(model.remainingUsageText)
@@ -122,7 +134,11 @@ struct NotchView: View {
             }
             .buttonStyle(.plain)
             .help("打开 Codex")
-            .scaleEffect(x: usesSmallIdleLayout ? 0.84 : 1, y: 1, anchor: .leading)
+            .scaleEffect(
+                x: usesSmallIdleLayout && model.connectionState == .connected ? 0.84 : 1,
+                y: 1,
+                anchor: .leading
+            )
 
             Spacer(minLength: 92)
 
