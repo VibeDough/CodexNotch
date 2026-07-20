@@ -28,11 +28,10 @@ open "dist/CodexNotch.app"
 
 拖入动作会生成包含文件路径、网页地址或文字原文的分析指令。点击刘海中的“在 Codex 新建对话”按钮后，会打开 Codex 新对话并带入该指令。
 
-## 许可
+## 开源与品牌
 
-本项目采用双许可模式：
+CodexNotch 源代码采用 [GNU GPL v3.0](LICENSE) 开源。你可以使用、研究、修改和分发代码；分发修改版本时，需要遵守 GPLv3 并提供对应源代码。
 
-- 个人与其他非商业用途遵循 [PolyForm Noncommercial 1.0.0](LICENSE.md)，可以在条款允许的范围内使用、修改和分发。
-- 商业使用、付费集成、商业分发或基于本项目开发商业产品，需要获得 49Labs 的单独书面授权。参见 [商业许可说明](COMMERCIAL_LICENSE.md)。
+`CodexNotch` 名称、官方图标和 Logo 不属于 GPL 授权范围。公开分发的 Fork 应使用不同的产品名称和图标，并明确说明不是 49Labs 官方版本。详见 [品牌政策](TRADEMARKS.md)。
 
-这是一款源码可见（source-available）软件，不是 OSI 定义的开源软件。保留所有版权与许可声明。
+欢迎通过 Fork 和 Pull Request 参与，参见 [贡献指南](CONTRIBUTING.md)。

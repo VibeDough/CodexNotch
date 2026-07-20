@@ -1,6 +1,6 @@
 # CodexNotch 产品文档
 
-> 个人与非商业用途免费；商业使用需要获得 49Labs 的单独书面授权。详见 [许可说明](../LICENSE.md) 与 [商业许可](../COMMERCIAL_LICENSE.md)。
+> CodexNotch 源代码采用 [GNU GPL v3.0](../LICENSE) 开源；CodexNotch 名称与官方图标仍归 49Labs 管理。详见 [品牌政策](../TRADEMARKS.md)。
 
 CodexNotch 是一款位于 MacBook 刘海区域的轻量 Codex 状态工具。它让用户在浏览网页、写文档或切换应用时，仍能看到任务是否运行、是否等待确认以及何时完成。
 
