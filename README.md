@@ -1,8 +1,8 @@
-# 49agent Notch
+# CodexNotch
 
 一个在 MacBook 刘海区域展示 Codex 任务、用量和连接状态的轻量 macOS 应用。
 
-[产品主页](https://vibedough.github.io/49agent-notch/) · [English](https://vibedough.github.io/49agent-notch/en/) · [下载安装](https://github.com/VibeDough/49agent-notch/releases/latest) · [产品文档](docs/PRODUCT.md)
+[产品主页](https://vibedough.github.io/CodexNotch/) · [English](https://vibedough.github.io/CodexNotch/en/) · [下载安装](https://github.com/VibeDough/CodexNotch/releases/latest) · [产品文档](docs/PRODUCT.md)
 
 当前版本支持：
 
@@ -21,7 +21,7 @@
 ```sh
 cd CodexPetNotch
 sh build-app.sh
-open "dist/49agent Notch.app"
+open "dist/CodexNotch.app"
 ```
 
 应用只在本机读取 `~/.codex/sessions/` 中的会话状态，不上传会话内容或用量数据。

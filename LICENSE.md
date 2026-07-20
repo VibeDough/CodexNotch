@@ -70,4 +70,4 @@ The **licensor** is the individual or entity offering these terms, and the **sof
 
 **Use** means anything you do with the software requiring one of your licenses.
 
-Required Notice: Copyright 2026 49Labs. 49agent Notch is licensed for noncommercial use only under PolyForm Noncommercial 1.0.0. Commercial use requires a separate written license from 49Labs.
+Required Notice: Copyright 2026 49Labs. CodexNotch is licensed for noncommercial use only under PolyForm Noncommercial 1.0.0. Commercial use requires a separate written license from 49Labs.

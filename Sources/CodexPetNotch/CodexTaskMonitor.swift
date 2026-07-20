@@ -483,7 +483,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
                 sessionID = payload["id"] as? String ?? sessionID
                 if let cwd = payload["cwd"] as? String {
                     let directoryName = URL(fileURLWithPath: cwd).lastPathComponent
-                    project = directoryName == "49labs" ? "49agent Notch" : directoryName
+                    project = directoryName == "49labs" ? "CodexNotch" : directoryName
                 }
             case "turn_context":
                 model = payload["model"] as? String ?? model

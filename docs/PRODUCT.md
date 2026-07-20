@@ -1,8 +1,8 @@
-# 49agent Notch 产品文档
+# CodexNotch 产品文档
 
 > 个人与非商业用途免费；商业使用需要获得 49Labs 的单独书面授权。详见 [许可说明](../LICENSE.md) 与 [商业许可](../COMMERCIAL_LICENSE.md)。
 
-49agent Notch 是一款位于 MacBook 刘海区域的轻量 Codex 状态工具。它让用户在浏览网页、写文档或切换应用时，仍能看到任务是否运行、是否等待确认以及何时完成。
+CodexNotch 是一款位于 MacBook 刘海区域的轻量 Codex 状态工具。它让用户在浏览网页、写文档或切换应用时，仍能看到任务是否运行、是否等待确认以及何时完成。
 
 ## 1. 产品定位
 
@@ -18,13 +18,13 @@
 
 ## 3. 安装
 
-可以从 [GitHub Releases](https://github.com/VibeDough/49agent-notch/releases/latest) 下载 Apple 芯片版 DMG，将应用拖入“应用程序”文件夹；也可以从源码构建：
+可以从 [GitHub Releases](https://github.com/VibeDough/CodexNotch/releases/latest) 下载 Apple 芯片版 DMG，将应用拖入“应用程序”文件夹；也可以从源码构建：
 
 ```sh
-git clone https://github.com/VibeDough/49agent-notch.git
-cd 49agent-notch
+git clone https://github.com/VibeDough/CodexNotch.git
+cd CodexNotch
 sh build-app.sh
-open "dist/49agent Notch.app"
+open "dist/CodexNotch.app"
 ```
 
 当前预览版尚未经过 Apple 公证。首次打开如果 macOS 阻止应用，请右键应用选择“打开”，或在“系统设置 → 隐私与安全性”中确认打开。正式版本将改用 Developer ID 签名与公证。
@@ -69,7 +69,7 @@ open "dist/49agent Notch.app"
 3. 点击“在 Codex 新建对话”。
 4. 应用通过 `codex://threads/new` 打开带分析指令的新任务。
 
-拖入本地文件时传递的是文件路径和分析提示，不会由 49agent Notch 上传文件。
+拖入本地文件时传递的是文件路径和分析提示，不会由 CodexNotch 上传文件。
 
 ### 5.5 屏幕与共存
 
@@ -101,7 +101,7 @@ open "dist/49agent Notch.app"
 
 - 确认 Codex 正在运行。
 - 确认当前任务产生了新的会话事件。
-- 重启 49agent Notch 后再运行一个简短任务。
+- 重启 CodexNotch 后再运行一个简短任务。
 
 ### 完成提醒没有消失
 

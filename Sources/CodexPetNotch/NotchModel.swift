@@ -547,7 +547,7 @@ final class NotchModel: ObservableObject {
                 self.refreshConnectionState()
             }
         }
-        networkMonitor.start(queue: DispatchQueue(label: "49agent.network-monitor"))
+        networkMonitor.start(queue: DispatchQueue(label: "codexnotch.network-monitor"))
     }
 
     private func enqueueCompletion(_ task: CodexTaskItem, message: String, eventDate: Date) {
