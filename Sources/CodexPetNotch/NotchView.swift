@@ -4,7 +4,6 @@ import UniformTypeIdentifiers
 
 struct NotchView: View {
     @ObservedObject var model: NotchModel
-    @State private var isCompletionBadgeHovered = false
 
     private var showsTaskDetails: Bool {
         model.isTaskStatusPinned && model.activeTasks.count > 1
@@ -143,17 +142,9 @@ struct NotchView: View {
                     if model.hasCollapsedCompletion {
                         Button(action: model.toggleCompletionStackCollapsed) {
                             completionCountBadge
-                                .scaleEffect(isCompletionBadgeHovered ? 1.03 : 1)
-                                .brightness(isCompletionBadgeHovered ? 0.06 : 0)
-                                .shadow(
-                                    color: Color.green.opacity(isCompletionBadgeHovered ? 0.22 : 0),
-                                    radius: 5
-                                )
                         }
                         .buttonStyle(.plain)
                         .help("展开已完成任务")
-                        .onHover { isCompletionBadgeHovered = $0 }
-                        .animation(.easeOut(duration: 0.14), value: isCompletionBadgeHovered)
                     } else if model.activeTasks.count > 1 {
                         Button { model.toggleTaskStatusPinned() } label: { taskStatus }
                             .buttonStyle(.plain)
