@@ -58,6 +58,9 @@ private struct UsageCacheEntry {
     let tokens: Int
     let limit: CodexUsageLimit?
     let limitDate: Date
+    let dayStart: Date
+    let readOffset: UInt64
+    let lastTotal: Int?
 }
 
 private struct ThreadMetadata {
@@ -102,6 +105,14 @@ final class CodexTaskMonitor: @unchecked Sendable {
         return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
     }
 
+    func hasDesktopActivity(since date: Date) -> Bool {
+        guard let url = desktopLogURL(),
+              let modifiedAt = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate else {
+            return false
+        }
+        return modifiedAt >= date
+    }
+
     private func latestDesktopState() -> (viewedThread: CodexViewedThread?, itemCount: Int?, updatedAt: Date?) {
         guard let logURL = desktopLogURL(),
               let handle = try? FileHandle(forReadingFrom: logURL) else { return (nil, nil, nil) }
@@ -123,8 +134,8 @@ final class CodexTaskMonitor: @unchecked Sendable {
         for line in text.split(separator: "\n") {
             ingestThreadMetadata(from: String(line))
         }
-        let petStackPattern = #"Native pet composition preparation sent .*activityStackItemCount=([0-9]+).*id=mascot-badge"#
-        let viewedPattern = #"thread_stream_view_activity_changed active=true conversationId=([0-9a-f-]+).*rendererWindowFocused=true"#
+        let petStackPattern = #"Native pet composition preparation sent .*activityStackItemCount=([0-9]+).*id=mascot-badge|id=mascot-badge.*activityStackItemCount=([0-9]+)"#
+        let viewedPattern = #"thread_stream_view_activity_changed .*?(?:conversationId=([0-9a-f-]+).*?active=true|active=true.*?conversationId=([0-9a-f-]+)).*?rendererWindowFocused=true"#
         guard let petStackExpression = try? NSRegularExpression(pattern: petStackPattern),
               let viewedExpression = try? NSRegularExpression(pattern: viewedPattern) else {
             return (nil, nil, nil)
@@ -136,7 +147,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
             let range = NSRange(value.startIndex..., in: value)
             if !foundPetStack,
                let match = petStackExpression.firstMatch(in: value, range: range),
-               let countRange = Range(match.range(at: 1), in: value),
+               let countRange = Range(match.range(at: match.range(at: 1).location != NSNotFound ? 1 : 2), in: value),
                let count = Int(value[countRange]),
                let timestamp = value.split(separator: " ", maxSplits: 1).first,
                let updatedAt = Self.parseDate(String(timestamp)) {
@@ -146,7 +157,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
             }
             if !foundViewedThread,
                let match = viewedExpression.firstMatch(in: value, range: range),
-               let idRange = Range(match.range(at: 1), in: value),
+               let idRange = Range(match.range(at: match.range(at: 1).location != NSNotFound ? 1 : 2), in: value),
                let timestamp = value.split(separator: " ", maxSplits: 1).first,
                let viewedAt = Self.parseDate(String(timestamp)) {
                 cachedViewedThread = CodexViewedThread(id: String(value[idRange]), viewedAt: viewedAt)
@@ -228,9 +239,6 @@ final class CodexTaskMonitor: @unchecked Sendable {
             }
         }
 
-        let cutoff = Date().addingTimeInterval(-600)
-        pendingConfirmations = pendingConfirmations.filter { $0.value.activity.eventDate >= cutoff }
-
         var bySession = Dictionary(uniqueKeysWithValues: pendingConfirmations.map { ($0.key, $0.value) })
         for rollout in observed where rollout.activity.phase != .waiting {
             if let current = bySession[rollout.task.id],
@@ -247,6 +255,8 @@ final class CodexTaskMonitor: @unchecked Sendable {
             return (cachedTodayTokens, cachedUsageLimit)
         }
         let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: Date())
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart)!
         var newestLimitDate = Date.distantPast
         var newestLimit: CodexUsageLimit?
         let recentURLs = newestRollouts(limit: 64)
@@ -255,10 +265,16 @@ final class CodexTaskMonitor: @unchecked Sendable {
                   let date = values.contentModificationDate,
                   calendar.isDateInToday(date) else { return }
             let entry: UsageCacheEntry
-            if let cached = usageCache[url], cached.modifiedAt == date {
+            if let cached = usageCache[url], cached.modifiedAt == date, cached.dayStart == dayStart {
                 entry = cached
             } else {
-                entry = readUsageEntry(from: url, modifiedAt: date)
+                entry = readUsageEntry(
+                    from: url,
+                    modifiedAt: date,
+                    dayStart: dayStart,
+                    dayEnd: dayEnd,
+                    previous: usageCache[url]
+                )
                 usageCache[url] = entry
             }
             total += entry.tokens
@@ -274,23 +290,45 @@ final class CodexTaskMonitor: @unchecked Sendable {
         return (cachedTodayTokens, cachedUsageLimit)
     }
 
-    private func readUsageEntry(from url: URL, modifiedAt: Date) -> UsageCacheEntry {
+    private func readUsageEntry(
+        from url: URL,
+        modifiedAt: Date,
+        dayStart: Date,
+        dayEnd: Date,
+        previous: UsageCacheEntry?
+    ) -> UsageCacheEntry {
         guard let handle = try? FileHandle(forReadingFrom: url) else {
-            return UsageCacheEntry(modifiedAt: modifiedAt, tokens: 0, limit: nil, limitDate: .distantPast)
+            return UsageCacheEntry(modifiedAt: modifiedAt, tokens: 0, limit: nil, limitDate: .distantPast, dayStart: dayStart, readOffset: 0, lastTotal: nil)
         }
         defer { try? handle.close() }
         let length = (try? handle.seekToEnd()) ?? 0
-        let sampleSize: UInt64 = 750_000
-        try? handle.seek(toOffset: length > sampleSize ? length - sampleSize : 0)
-        let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
-        for line in text.split(separator: "\n").reversed() {
+        let canContinue = previous?.dayStart == dayStart && length >= (previous?.readOffset ?? 0)
+        if !canContinue {
+            return readInitialUsageEntryBackward(
+                from: handle,
+                length: length,
+                modifiedAt: modifiedAt,
+                dayStart: dayStart,
+                dayEnd: dayEnd
+            )
+        }
+        if let previous { try? handle.seek(toOffset: previous.readOffset) }
+        var accumulator = CodexUsageAccumulator(
+            dayStart: dayStart,
+            dayEnd: dayEnd,
+            dailyTokens: canContinue ? previous?.tokens ?? 0 : 0,
+            latestLimit: canContinue ? previous?.limit : nil,
+            latestLimitDate: canContinue ? previous?.limitDate ?? .distantPast : .distantPast,
+            previousTotal: canContinue ? previous?.lastTotal : nil
+        )
+        enumerateLines(in: handle) { line in
             guard let data = line.data(using: .utf8),
                   let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let payload = object["payload"] as? [String: Any],
                   payload["type"] as? String == "token_count",
                   let info = payload["info"] as? [String: Any],
                   let usage = info["total_token_usage"] as? [String: Any],
-                  let tokens = usage["total_tokens"] as? Int else { continue }
+                  let tokenNumber = usage["total_tokens"] as? NSNumber else { return }
             let eventDate = (object["timestamp"] as? String).flatMap(Self.parseDate) ?? modifiedAt
             var limit: CodexUsageLimit?
             if let limits = payload["rate_limits"] as? [String: Any],
@@ -302,15 +340,110 @@ final class CodexTaskMonitor: @unchecked Sendable {
                     planType: limits["plan_type"] as? String
                 )
             }
-            return UsageCacheEntry(modifiedAt: modifiedAt, tokens: tokens, limit: limit, limitDate: eventDate)
+            accumulator.ingest(total: tokenNumber.intValue, at: eventDate, limit: limit)
         }
-        return UsageCacheEntry(modifiedAt: modifiedAt, tokens: 0, limit: nil, limitDate: .distantPast)
+        return UsageCacheEntry(
+            modifiedAt: modifiedAt,
+            tokens: accumulator.dailyTokens,
+            limit: accumulator.latestLimit,
+            limitDate: accumulator.latestLimitDate,
+            dayStart: dayStart,
+            readOffset: length,
+            lastTotal: accumulator.previousTotal
+        )
+    }
+
+    private func readInitialUsageEntryBackward(
+        from handle: FileHandle,
+        length: UInt64,
+        modifiedAt: Date,
+        dayStart: Date,
+        dayEnd: Date
+    ) -> UsageCacheEntry {
+        var offset = length
+        var suffix = Data()
+        var events: [(total: Int, date: Date, limit: CodexUsageLimit?)] = []
+        var foundBaseline = false
+        while offset > 0, !foundBaseline {
+            let count = min(UInt64(262_144), offset)
+            offset -= count
+            try? handle.seek(toOffset: offset)
+            guard let chunk = try? handle.read(upToCount: Int(count)) else { break }
+            var combined = chunk
+            combined.append(suffix)
+            var lines = combined.split(separator: 0x0A, omittingEmptySubsequences: true)
+            if offset > 0, !lines.isEmpty {
+                suffix = Data(lines.removeFirst())
+            } else {
+                suffix.removeAll(keepingCapacity: true)
+            }
+            for line in lines.reversed() {
+                guard let event = usageEvent(from: String(decoding: line, as: UTF8.self), fallbackDate: modifiedAt) else {
+                    continue
+                }
+                events.append(event)
+                if event.date < dayStart {
+                    foundBaseline = true
+                    break
+                }
+            }
+        }
+
+        var accumulator = CodexUsageAccumulator(dayStart: dayStart, dayEnd: dayEnd)
+        for event in events.reversed() {
+            accumulator.ingest(total: event.total, at: event.date, limit: event.limit)
+        }
+        return UsageCacheEntry(
+            modifiedAt: modifiedAt,
+            tokens: accumulator.dailyTokens,
+            limit: accumulator.latestLimit,
+            limitDate: accumulator.latestLimitDate,
+            dayStart: dayStart,
+            readOffset: length,
+            lastTotal: accumulator.previousTotal
+        )
+    }
+
+    private func enumerateLines(in handle: FileHandle, body: (String) -> Void) {
+        var pending = Data()
+        while let chunk = try? handle.read(upToCount: 262_144), !chunk.isEmpty {
+            pending.append(chunk)
+            while let newline = pending.firstRange(of: Data([0x0A])) {
+                body(String(decoding: pending[..<newline.lowerBound], as: UTF8.self))
+                pending.removeSubrange(..<newline.upperBound)
+            }
+        }
+        if !pending.isEmpty { body(String(decoding: pending, as: UTF8.self)) }
+    }
+
+    private func usageEvent(
+        from line: String,
+        fallbackDate: Date
+    ) -> (total: Int, date: Date, limit: CodexUsageLimit?)? {
+        guard let data = line.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let payload = object["payload"] as? [String: Any],
+              payload["type"] as? String == "token_count",
+              let info = payload["info"] as? [String: Any],
+              let usage = info["total_token_usage"] as? [String: Any],
+              let tokenNumber = usage["total_tokens"] as? NSNumber else { return nil }
+        let eventDate = (object["timestamp"] as? String).flatMap(Self.parseDate) ?? fallbackDate
+        var limit: CodexUsageLimit?
+        if let limits = payload["rate_limits"] as? [String: Any],
+           let primary = limits["primary"] as? [String: Any],
+           let used = (primary["used_percent"] as? NSNumber)?.doubleValue {
+            limit = CodexUsageLimit(
+                usedPercent: used,
+                resetAt: (primary["resets_at"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) },
+                planType: limits["plan_type"] as? String
+            )
+        }
+        return (tokenNumber.intValue, eventDate, limit)
     }
 
     private func activity(for file: URL) -> MonitoredRollout? {
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: file.path),
               let modified = attributes[.modificationDate] as? Date,
-              Date().timeIntervalSince(modified) < 600,
               let handle = try? FileHandle(forReadingFrom: file) else {
             return nil
         }
@@ -396,6 +529,12 @@ final class CodexTaskMonitor: @unchecked Sendable {
             eventDate: lastPhase == .completed ? completionDate ?? lastEventDate : lastEventDate,
             startedAt: taskStartedAt
         )
+        let age = Date().timeIntervalSince(lastEventDate)
+        if lastPhase == .waiting {
+            guard age < 7 * 86_400 else { return nil }
+        } else if [.running, .review, .failed].contains(lastPhase) {
+            guard age < 6 * 3_600 else { return nil }
+        }
         let task = CodexTaskItem(
             id: sessionID,
             title: threadMetadata[sessionID].map { Self.shortText($0.title, limit: 24) }

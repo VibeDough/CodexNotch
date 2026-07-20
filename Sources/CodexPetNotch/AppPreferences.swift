@@ -37,7 +37,11 @@ final class AppPreferences {
     }
 
     func targetScreen() -> NSScreen? {
-        guard let selectedScreenNumber else { return NSScreen.main ?? NSScreen.screens.first }
+        guard let selectedScreenNumber, selectedScreenNumber >= 0 else {
+            return NSScreen.screens.first { $0.safeAreaInsets.top > 0 }
+                ?? NSScreen.main
+                ?? NSScreen.screens.first
+        }
         return NSScreen.screens.first { screenNumber($0) == selectedScreenNumber }
             ?? NSScreen.main
             ?? NSScreen.screens.first

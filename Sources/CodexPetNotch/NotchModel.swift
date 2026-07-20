@@ -247,17 +247,15 @@ final class NotchModel: ObservableObject {
     }
 
     var presentationMode: NotchPresentationMode {
+        if waitingTask != nil { return .waiting }
         if isExpanded { return .drop }
         if isShowingSettings { return .settings }
-        if waitingTask != nil { return .waiting }
         if isTaskStatusPinned, activeTasks.count > 1 { return .taskList(activeTasks.count) }
         if primaryTask != nil {
             return visibleCompletionMessage == nil || isCompletionStackCollapsed ? .task : .taskWithCompletion
         }
         if visibleCompletionMessage != nil {
-            return isCompletionStackCollapsed
-                ? (usesCompactBar ? .compactIdle : .collapsedCompletion)
-                : .completion
+            return isCompletionStackCollapsed ? .collapsedCompletion : .completion
         }
         if isHovered { return .usage }
         return usesCompactBar ? .compactIdle : .idle
@@ -402,12 +400,11 @@ final class NotchModel: ObservableObject {
         latestDrop = "正在 Codex 新建对话"
         state = .jumping
 
-        var components = URLComponents()
-        components.scheme = "codex"
-        components.host = "new"
-        components.queryItems = [URLQueryItem(name: "prompt", value: prompt)]
-        if let url = components.url, NSWorkspace.shared.open(url) == false {
-            openCodex()
+        guard let url = CodexDeepLink.newThread(prompt: prompt),
+              NSWorkspace.shared.open(url) else {
+            latestDrop = "无法新建对话，请重试"
+            state = .failed
+            return
         }
         pendingDropPrompt = nil
         latestDrop = "拖入文件、网址或文字"
@@ -517,13 +514,22 @@ final class NotchModel: ObservableObject {
         if connectionState == .reconnecting || !wasCodexConnected {
             connectionState = .reconnecting
             guard reconnectTask == nil else { return }
+            let reconnectStartedAt = Date()
             reconnectTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(1.8))
+                for _ in 0..<16 {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    guard !Task.isCancelled, let self,
+                          !NSRunningApplication.runningApplications(
+                            withBundleIdentifier: "com.openai.codex"
+                          ).isEmpty,
+                          self.networkAvailable else { return }
+                    if self.taskMonitor.hasDesktopActivity(since: reconnectStartedAt) { break }
+                }
                 guard !Task.isCancelled, let self,
-                      !NSRunningApplication.runningApplications(
-                        withBundleIdentifier: "com.openai.codex"
-                      ).isEmpty,
-                      self.networkAvailable else { return }
+                      self.taskMonitor.hasDesktopActivity(since: reconnectStartedAt) else {
+                    self?.reconnectTask = nil
+                    return
+                }
                 self.connectionState = .reconnected
                 try? await Task.sleep(for: .seconds(3))
                 guard !Task.isCancelled else { return }

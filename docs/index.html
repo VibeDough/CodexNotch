@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#050507">
+  <meta name="description" content="49agent Notch — 把 Codex 任务状态、用量与提醒放进 MacBook 刘海。">
+  <title>49agent Notch — Codex 状态，恰好在顶部</title>
+  <link rel="icon" href="assets/49agent-notch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="nav shell" aria-label="主导航">
+    <a class="brand" href="#top" aria-label="49agent Notch 首页">
+      <img src="assets/49agent-notch-icon.png" alt="">
+      <span>49agent Notch</span>
+    </a>
+    <div class="nav-links">
+      <a href="#features">功能</a>
+      <a href="PRODUCT.html">文档</a>
+      <a class="pill" href="https://github.com/VibeDough/49agent-notch">GitHub</a>
+    </div>
+  </nav>
+
+  <main id="top">
+    <section class="hero shell">
+      <p class="eyebrow reveal">FOR CODEX ON MAC</p>
+      <h1 class="reveal">任务在运行。<br><span>你不必一直盯着。</span></h1>
+      <p class="hero-copy reveal">把 Codex 的任务状态、剩余用量和完成提醒安静地放进 MacBook 刘海。需要时展开，平时几乎感觉不到它。</p>
+      <div class="hero-actions reveal">
+        <a class="button primary" href="#install">开始使用</a>
+        <a class="button secondary" href="PRODUCT.html">阅读产品文档</a>
+      </div>
+
+      <div class="stage reveal" aria-label="49agent Notch 界面演示">
+        <div class="screen-glow"></div>
+        <div class="notch-demo">
+          <div class="notch-top"></div>
+          <div class="status-row">
+            <strong>剩余 73%</strong>
+            <span class="physical-notch" aria-hidden="true"></span>
+            <strong><i></i> 分析 2</strong>
+          </div>
+          <div class="task-row">
+            <i></i>
+            <div><b>让状态一直可见，但不打扰当前工作</b><small>分析中 · 01:24</small></div>
+            <span><b>5.6 Sol</b><small>推理 轻度</small></span>
+          </div>
+          <div class="flow-line"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="statement shell reveal">
+      <p>不是另一个需要管理的窗口。</p>
+      <h2>它更像 Mac 本来就有的<br>一层 Codex 状态。</h2>
+    </section>
+
+    <section class="features shell" id="features">
+      <article class="feature feature-wide reveal">
+        <div class="feature-copy">
+          <p class="eyebrow">LIVE TASKS</p>
+          <h3>多任务，也能一眼看懂。</h3>
+          <p>默认展示最重要的一项。点击任务即可展开全部，再次点击自然收回。模型、推理强度、Token 和运行时间保持对应。</p>
+        </div>
+        <div class="task-stack" aria-hidden="true">
+          <div><i></i><span><b>设计产品宣传页</b><small>分析中 · 00:42</small></span><em>5.6 Sol</em></div>
+          <div><i></i><span><b>整理演示视频脚本</b><small>运行中 · 00:18</small></span><em>+2</em></div>
+        </div>
+      </article>
+
+      <article class="feature reveal">
+        <p class="eyebrow">USAGE</p>
+        <h3>余量，就在余光里。</h3>
+        <p>显示剩余用量、今日 Token、重置时间与 Codex 版本。低于 50% 后只改变颜色，不增加噪音。</p>
+        <div class="usage-card"><strong>73%</strong><span>今日 42.6M Token</span><div><i style="width:73%"></i></div></div>
+      </article>
+
+      <article class="feature reveal">
+        <p class="eyebrow">DROP TO CODEX</p>
+        <h3>拖进去，开一个新任务。</h3>
+        <p>把文件、网页或文字拖到刘海，确认后直接在 Codex 新建带分析指令的对话。</p>
+        <div class="drop-card"><span>↓</span><b>松开，交给 Codex</b></div>
+      </article>
+
+      <article class="feature feature-dark reveal">
+        <p class="eyebrow">COMPLETION</p>
+        <h3>完成了，它会告诉你。</h3>
+        <p>待查看结果用紧凑徽标堆叠。点击即可回到对应 Codex 对话，不让历史结果挡住正在运行的任务。</p>
+        <div class="done-badge">✓ <b>2</b></div>
+      </article>
+
+      <article class="feature feature-dark reveal">
+        <p class="eyebrow">LOCAL FIRST</p>
+        <h3>会话状态只留在本机。</h3>
+        <p>应用读取本机 Codex 会话与桌面日志，不上传对话内容、任务信息或用量数据。</p>
+        <div class="privacy-mark">本机读取 <span>✓</span></div>
+      </article>
+    </section>
+
+    <section class="install shell reveal" id="install">
+      <img src="assets/49agent-notch-icon.png" alt="49agent Notch 图标">
+      <p class="eyebrow">PRIVATE PREVIEW</p>
+      <h2>让 Codex 的进度，<br>回到视线该在的位置。</h2>
+      <p>当前为 macOS 14+ 私人预览版本，需要本机安装 Codex。</p>
+      <div class="code"><code>sh build-app.sh</code><button type="button" data-copy="sh build-app.sh">复制</button></div>
+      <a class="button primary" href="https://github.com/VibeDough/49agent-notch">在 GitHub 查看项目</a>
+    </section>
+  </main>
+
+  <footer class="footer shell">
+    <span>49agent Notch · Built by 49Labs</span>
+    <div><a href="PRODUCT.html">产品文档</a><a href="VIDEO_DEMO_GUIDE.html">演示指南</a></div>
+  </footer>
+  <script src="script.js"></script>
+</body>
+</html>
