@@ -18,6 +18,7 @@
     <div class="nav-links">
       <a href="#features">功能</a>
       <a href="PRODUCT.html">文档</a>
+      <a class="language-link" href="en/">EN</a>
       <a class="pill" href="https://github.com/VibeDough/49agent-notch">GitHub</a>
     </div>
   </nav>
@@ -64,8 +65,21 @@
           <p>默认展示最重要的一项。点击任务即可展开全部，再次点击自然收回。模型、推理强度、Token 和运行时间保持对应。</p>
         </div>
         <div class="task-stack" aria-hidden="true">
-          <div><i></i><span><b>设计产品宣传页</b><small>分析中 · 00:42</small></span><em>5.6 Sol</em></div>
-          <div><i></i><span><b>整理演示视频脚本</b><small>运行中 · 00:18</small></span><em>+2</em></div>
+          <div><i></i><span><b>检查界面的响应式布局</b><small>分析中 · 00:42</small></span><em>5.6 Sol</em></div>
+          <div><i></i><span><b>整理本周的工作摘要</b><small>运行中 · 00:18</small></span><em>+2</em></div>
+        </div>
+      </article>
+
+      <article class="feature feature-wide feature-motion reveal">
+        <div class="feature-copy">
+          <p class="eyebrow">LIVE GLOW</p>
+          <h3>运行状态，会沿着边缘流动。</h3>
+          <p>流光始终贴合刘海外框循环，在两侧向上逐渐变细。它只在任务运行时出现，并尊重系统的“减少动态效果”设置。</p>
+        </div>
+        <div class="motion-demo" aria-label="刘海流光循环动画">
+          <div class="motion-content"><strong>剩余 73%</strong><strong><i></i> 分析 2</strong></div>
+          <div class="motion-task"><i></i><span><b>正在检查界面状态</b><small>分析中 · 00:24</small></span><em>5.6 Sol</em></div>
+          <div class="motion-flow" aria-hidden="true"></div>
         </div>
       </article>
 
@@ -81,6 +95,20 @@
         <h3>拖进去，开一个新任务。</h3>
         <p>把文件、网页或文字拖到刘海，确认后直接在 Codex 新建带分析指令的对话。</p>
         <div class="drop-card"><span>↓</span><b>松开，交给 Codex</b></div>
+      </article>
+
+      <article class="feature reveal">
+        <p class="eyebrow">WAITING FOR YOU</p>
+        <h3>需要确认时，不会悄悄停住。</h3>
+        <p>待确认结果以紧凑卡片显示。点击标题或绿色确认按钮，都会返回对应的 Codex 对话。</p>
+        <div class="confirm-card"><span>↩</span><div><b>是否继续执行下一步？</b><small>等待你的确认</small></div><strong>✓</strong></div>
+      </article>
+
+      <article class="feature reveal">
+        <p class="eyebrow">IDLE HOVER</p>
+        <h3>空闲时更安静，靠近时才展开。</h3>
+        <p>平时只保留余量与空闲状态。鼠标靠近后，平滑展开今日 Token、重置时间和版本信息。</p>
+        <div class="idle-demo"><div><strong>73%</strong><b><i></i> 空闲 0</b></div><section><small>今日消耗</small><strong>42.6M</strong><span>重置 6天11小时</span></section></div>
       </article>
 
       <article class="feature feature-dark reveal">
@@ -100,17 +128,20 @@
 
     <section class="install shell reveal" id="install">
       <img src="assets/49agent-notch-icon.png" alt="49agent Notch 图标">
-      <p class="eyebrow">PRIVATE PREVIEW</p>
+      <p class="eyebrow">APPLE SILICON PREVIEW</p>
       <h2>让 Codex 的进度，<br>回到视线该在的位置。</h2>
-      <p>当前为 macOS 14+ 私人预览版本，需要本机安装 Codex。</p>
-      <div class="code"><code>sh build-app.sh</code><button type="button" data-copy="sh build-app.sh">复制</button></div>
-      <a class="button primary" href="https://github.com/VibeDough/49agent-notch">在 GitHub 查看项目</a>
+      <p>支持 macOS 14+ 与 Apple 芯片，需要本机安装 Codex。预览版尚未经过 Apple 公证，首次启动请右键选择“打开”。</p>
+      <div class="install-actions">
+        <a class="button primary" href="https://github.com/VibeDough/49agent-notch/releases/latest/download/49agent-Notch-v0.1.0-arm64.dmg">下载 DMG 安装包</a>
+        <a class="button secondary" href="https://github.com/VibeDough/49agent-notch">查看源代码</a>
+      </div>
+      <p class="license-note">个人与非商业用途免费 · 商业使用需要另行授权</p>
     </section>
   </main>
 
   <footer class="footer shell">
     <span>49agent Notch · Built by 49Labs</span>
-    <div><a href="PRODUCT.html">产品文档</a><a href="VIDEO_DEMO_GUIDE.html">演示指南</a></div>
+    <div><a href="PRODUCT.html">产品文档</a><a href="LICENSE.html">许可说明</a><a href="en/">English</a></div>
   </footer>
   <script src="script.js"></script>
 </body>

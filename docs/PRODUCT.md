@@ -1,5 +1,7 @@
 # 49agent Notch 产品文档
 
+> 个人与非商业用途免费；商业使用需要获得 49Labs 的单独书面授权。详见 [许可说明](../LICENSE.md) 与 [商业许可](../COMMERCIAL_LICENSE.md)。
+
 49agent Notch 是一款位于 MacBook 刘海区域的轻量 Codex 状态工具。它让用户在浏览网页、写文档或切换应用时，仍能看到任务是否运行、是否等待确认以及何时完成。
 
 ## 1. 产品定位
@@ -16,7 +18,7 @@
 
 ## 3. 安装
 
-当前为私人预览版本，需要从源码构建：
+可以从 [GitHub Releases](https://github.com/VibeDough/49agent-notch/releases/latest) 下载 Apple 芯片版 DMG，将应用拖入“应用程序”文件夹；也可以从源码构建：
 
 ```sh
 git clone https://github.com/VibeDough/49agent-notch.git
@@ -25,7 +27,7 @@ sh build-app.sh
 open "dist/49agent Notch.app"
 ```
 
-首次打开如果 macOS 阻止未公证应用，请在“系统设置 → 隐私与安全性”中确认打开。公开版本应改用 Developer ID 签名与公证。
+当前预览版尚未经过 Apple 公证。首次打开如果 macOS 阻止应用，请右键应用选择“打开”，或在“系统设置 → 隐私与安全性”中确认打开。正式版本将改用 Developer ID 签名与公证。
 
 ## 4. 状态说明
 
@@ -113,7 +115,7 @@ open "dist/49agent Notch.app"
 
 ## 9. 发布前路线
 
-1. Developer ID 签名、公证和 DMG 安装包。
+1. Developer ID 签名与公证。
 2. 针对 Codex 日志格式变化增加版本兼容层。
 3. 增加安装后引导与诊断页面。
 4. 补充更多 MacBook 和外接显示器实机验证。
