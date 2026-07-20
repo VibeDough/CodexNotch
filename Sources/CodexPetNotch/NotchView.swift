@@ -426,7 +426,9 @@ struct NotchView: View {
             HStack {
                 Label(model.remainingUsageStatusText, systemImage: "gauge.with.dots.needle.50percent")
                     .foregroundStyle(expandedUsageColor)
-                Spacer()
+                Spacer(minLength: 8)
+                Label("重置 \(model.resetCountdownText)", systemImage: "clock")
+                Spacer(minLength: 8)
                 Text("版本 \(model.codexVersion)")
             }
             .font(.system(size: 9.5, weight: .medium))
