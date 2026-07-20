@@ -134,11 +134,6 @@ struct NotchView: View {
             }
             .buttonStyle(.plain)
             .help("打开 Codex")
-            .scaleEffect(
-                x: usesSmallIdleLayout && model.connectionState == .connected ? 0.84 : 1,
-                y: 1,
-                anchor: .leading
-            )
 
             Spacer(minLength: 92)
 
@@ -236,16 +231,6 @@ struct NotchView: View {
         case .critical: .red
         default: .white.opacity(0.9)
         }
-    }
-
-    private var usesSmallIdleLayout: Bool {
-        !model.usesCompactBar
-            && model.activeTasks.isEmpty
-            && (model.visibleCompletionMessage == nil || model.hasCollapsedCompletion)
-            && model.waitingTask == nil
-            && !model.isHovered
-            && !model.isExpanded
-            && !model.isShowingSettings
     }
 
     @ViewBuilder

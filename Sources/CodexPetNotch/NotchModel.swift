@@ -25,6 +25,7 @@ enum UsageRemainingLevel {
 enum NotchPresentationMode: Equatable {
     case idle
     case compactIdle
+    case collapsedCompletion
     case usage
     case drop
     case settings
@@ -254,7 +255,9 @@ final class NotchModel: ObservableObject {
             return visibleCompletionMessage == nil || isCompletionStackCollapsed ? .task : .taskWithCompletion
         }
         if visibleCompletionMessage != nil {
-            return isCompletionStackCollapsed ? (usesCompactBar ? .compactIdle : .idle) : .completion
+            return isCompletionStackCollapsed
+                ? (usesCompactBar ? .compactIdle : .collapsedCompletion)
+                : .completion
         }
         if isHovered { return .usage }
         return usesCompactBar ? .compactIdle : .idle
@@ -264,6 +267,7 @@ final class NotchModel: ObservableObject {
         switch presentationMode {
         case .idle: CGSize(width: 310, height: 38)
         case .compactIdle: CGSize(width: 270, height: 36)
+        case .collapsedCompletion: CGSize(width: 322, height: 38)
         case .usage: CGSize(width: 450, height: 112)
         case .drop: CGSize(width: 450, height: 138)
         case .settings: CGSize(width: 450, height: 138)
