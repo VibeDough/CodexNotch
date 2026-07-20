@@ -2,7 +2,7 @@
 
 一个在 MacBook 刘海区域展示 Codex 任务、用量和连接状态的轻量 macOS 应用。
 
-[产品主页](https://49labsdev.github.io/CodexNotch/) · [English](https://49labsdev.github.io/CodexNotch/en/) · [下载安装](https://github.com/49LabsDev/CodexNotch/releases/latest) · [产品文档](docs/PRODUCT.md)
+[产品主页](https://vibedough.github.io/CodexNotch/) · [English](https://vibedough.github.io/CodexNotch/en/) · [下载安装](https://github.com/VibeDough/CodexNotch/releases/latest) · [产品文档](docs/PRODUCT.md)
 
 当前版本支持：
 
