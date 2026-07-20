@@ -109,11 +109,6 @@ struct NotchView: View {
                     } else if model.connectionState == .reconnected {
                         Image(systemName: "arrow.triangle.2.circlepath")
                         Text("已重连")
-                    } else if model.hasCollapsedCompletion {
-                        Text(model.remainingUsageText)
-                            .font(.system(size: 13, weight: .black, design: .rounded))
-                    } else if model.isHovered {
-                        Text(model.activeTasks.isEmpty ? "用量" : "任务")
                     } else {
                         Text(model.remainingUsageText)
                             .font(.system(size: 13, weight: .black, design: .rounded))
