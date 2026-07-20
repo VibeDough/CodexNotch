@@ -373,15 +373,11 @@ struct NotchView: View {
                 }
                 Spacer(minLength: 10)
                 Button(action: model.openCodex) {
-                    Label("打开 Codex", systemImage: "arrow.up.forward.app.fill")
-                        .font(.system(size: 9.5, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.72))
-                        .padding(.horizontal, 11)
-                        .frame(height: 27)
-                        .background(.white.opacity(0.08), in: Capsule())
-                        .contentShape(Capsule())
+                    Color.clear
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, minHeight: 34)
                 .allowsHitTesting(showsUsageDetails)
                 .accessibilityLabel("打开 Codex")
                 .help("打开 Codex")
