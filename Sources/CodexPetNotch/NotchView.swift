@@ -102,10 +102,10 @@ struct NotchView: View {
                 HStack(spacing: 5) {
                     if model.connectionState == .disconnected {
                         Image(systemName: "link.slash")
-                        Text("断开")
+                            .help("连接已断开")
                     } else if model.connectionState == .reconnecting {
                         Image(systemName: "wifi.exclamationmark")
-                        Text("正在重连")
+                            .help("正在重连")
                     } else if model.connectionState == .reconnected {
                         Image(systemName: "checkmark.circle.fill")
                             .help("已重连")
