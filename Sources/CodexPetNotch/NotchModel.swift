@@ -496,11 +496,13 @@ final class NotchModel: ObservableObject {
         defer { wasCodexConnected = connected }
         guard connected else {
             reconnectTask?.cancel()
+            reconnectTask = nil
             connectionState = .disconnected
             return
         }
         guard networkAvailable else {
             reconnectTask?.cancel()
+            reconnectTask = nil
             connectionState = .reconnecting
             return
         }
@@ -509,12 +511,20 @@ final class NotchModel: ObservableObject {
             return
         }
         if connectionState == .reconnecting || !wasCodexConnected {
-            connectionState = .reconnected
-            reconnectTask?.cancel()
+            connectionState = .reconnecting
+            guard reconnectTask == nil else { return }
             reconnectTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(1.8))
+                guard !Task.isCancelled, let self,
+                      !NSRunningApplication.runningApplications(
+                        withBundleIdentifier: "com.openai.codex"
+                      ).isEmpty,
+                      self.networkAvailable else { return }
+                self.connectionState = .reconnected
                 try? await Task.sleep(for: .seconds(3))
                 guard !Task.isCancelled else { return }
-                self?.connectionState = .connected
+                self.connectionState = .connected
+                self.reconnectTask = nil
             }
         }
     }
