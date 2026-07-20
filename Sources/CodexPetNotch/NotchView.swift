@@ -21,12 +21,12 @@ struct NotchView: View {
         VStack(spacing: 0) {
             collapsedBar
 
-            if model.isExpanded {
+            if let task = model.waitingTask {
+                confirmationCard(task)
+            } else if model.isExpanded {
                 EmptyView()
             } else if model.isShowingSettings {
                 settingsContent
-            } else if let task = model.waitingTask {
-                confirmationCard(task)
             } else if showsTaskDetails {
                 taskDetails
             } else if let task = model.primaryTask {
@@ -149,6 +149,10 @@ struct NotchView: View {
                         Button { model.toggleTaskStatusPinned() } label: { taskStatus }
                             .buttonStyle(.plain)
                             .help(model.isTaskStatusPinned ? "取消常驻任务" : "常驻显示任务")
+                    } else if let task = model.primaryTask {
+                        Button { model.openTask(task) } label: { taskStatus }
+                            .buttonStyle(.plain)
+                            .help("打开当前任务")
                     } else {
                         taskStatus
                     }
@@ -194,15 +198,6 @@ struct NotchView: View {
         .padding(.horizontal, 10)
         .frame(height: collapsedBarHeight)
         .contentShape(Rectangle())
-        .onTapGesture {
-            if model.hasCollapsedCompletion {
-                model.toggleCompletionStackCollapsed()
-            } else if model.activeTasks.count > 1 {
-                model.toggleTaskStatusPinned()
-            } else if let task = model.primaryTask {
-                model.openTask(task)
-            }
-        }
         .overlay {
             IslandShape(shoulder: 5, bottomRadius: 12)
                 .stroke(model.isDropTargeted ? Color.white.opacity(0.75) : .clear, lineWidth: 1)
@@ -272,7 +267,7 @@ struct NotchView: View {
         .padding(.horizontal, 8)
         .frame(height: 24)
         .background(Color(red: 0.46, green: 0.9, blue: 0.59), in: Capsule())
-        .offset(x: 6, y: 2)
+        .offset(y: 2)
         .frame(width: 68, height: 28, alignment: .trailing)
         .accessibilityLabel("\(model.pendingCompletionCount) 个待查看任务")
     }
@@ -740,7 +735,9 @@ private struct NotchSettingsContent: View {
     }
 
     private var selectedScreenName: String {
-        guard screenNumber >= 0 else { return "当前主屏" }
+        guard screenNumber >= 0 else {
+            return NSScreen.screens.contains { $0.safeAreaInsets.top > 0 } ? "内建刘海屏" : "当前主屏"
+        }
         return NSScreen.screens.first { screenNumberValue($0) == screenNumber }?.localizedName ?? "当前主屏"
     }
 

@@ -10,6 +10,7 @@ swift build -c release --jobs 2
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$ROOT/.build/release/CodexPetNotch" "$APP/Contents/MacOS/CodexPetNotch"
 cp "$ROOT/Info.plist" "$APP/Contents/Info.plist"
+cp "$ROOT/Sources/CodexPetNotch/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 RESOURCE_BUNDLE=$(find -L "$ROOT/.build/release" -maxdepth 1 -type d -name '*CodexPetNotch*.bundle' | head -n 1)
 if [ -n "$RESOURCE_BUNDLE" ]; then

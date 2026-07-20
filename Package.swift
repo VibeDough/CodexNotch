@@ -11,6 +11,10 @@ let package = Package(
         .executableTarget(
             name: "CodexPetNotch",
             resources: [.copy("Resources")]
+        ),
+        .testTarget(
+            name: "CodexPetNotchTests",
+            dependencies: ["CodexPetNotch"]
         )
     ]
 )
