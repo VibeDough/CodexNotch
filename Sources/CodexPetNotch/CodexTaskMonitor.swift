@@ -84,12 +84,15 @@ final class CodexTaskMonitor: @unchecked Sendable {
     private var cachedPetStackUpdatedAt: Date?
     private var cachedViewedThread: CodexViewedThread?
     private var threadMetadata: [String: ThreadMetadata] = [:]
+    private var cachedRolloutURLs: [URL] = []
+    private var rolloutDiscoveryDate = Date.distantPast
 
     func latestSnapshot() -> CodexStatusSnapshot {
         let desktopState = latestDesktopState()
-        let observedRollouts = newestRollouts().compactMap(cachedActivity(for:))
+        let recentRolloutURLs = newestRollouts(limit: 64)
+        let observedRollouts = recentRolloutURLs.prefix(8).compactMap(cachedActivity(for:))
         let rollouts = reconciledRollouts(observedRollouts)
-        let usageStats = todayUsageStats()
+        let usageStats = todayUsageStats(recentURLs: recentRolloutURLs)
         let activePhases: [CodexActivity.Phase] = [.running, .review, .waiting]
         let tasks = rollouts.filter { activePhases.contains($0.activity.phase) }.map(\.task)
         if let completion = rollouts.first(where: {
@@ -249,13 +252,12 @@ final class CodexTaskMonitor: @unchecked Sendable {
         return bySession.values.sorted { $0.activity.eventDate > $1.activity.eventDate }
     }
 
-    private func todayUsageStats() -> (tokens: Int, limit: CodexUsageLimit?) {
+    private func todayUsageStats(recentURLs: [URL]) -> (tokens: Int, limit: CodexUsageLimit?) {
         let calendar = Calendar.current
         let dayStart = calendar.startOfDay(for: Date())
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart)!
         var newestLimitDate = Date.distantPast
         var newestLimit: CodexUsageLimit?
-        let recentURLs = newestRollouts(limit: 64)
         cachedTodayTokens = recentURLs.reduce(into: 0) { total, url in
             guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
                   let date = values.contentModificationDate else { return }
@@ -608,6 +610,9 @@ final class CodexTaskMonitor: @unchecked Sendable {
     }
 
     private func newestRollouts(limit: Int = 8) -> [URL] {
+        if Date().timeIntervalSince(rolloutDiscoveryDate) < 2 {
+            return Array(cachedRolloutURLs.prefix(limit))
+        }
         guard let enumerator = FileManager.default.enumerator(
             at: sessionsURL,
             includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
@@ -620,6 +625,8 @@ final class CodexTaskMonitor: @unchecked Sendable {
             guard values?.isRegularFile == true, let date = values?.contentModificationDate else { continue }
             rollouts.append((url, date))
         }
-        return rollouts.sorted { $0.1 > $1.1 }.prefix(limit).map(\.0)
+        cachedRolloutURLs = Array(rollouts.sorted { $0.1 > $1.1 }.prefix(max(64, limit)).map(\.0))
+        rolloutDiscoveryDate = Date()
+        return Array(cachedRolloutURLs.prefix(limit))
     }
 }
