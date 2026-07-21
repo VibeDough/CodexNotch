@@ -63,6 +63,7 @@ final class NotchModel: ObservableObject {
     @Published var activeTaskCount = 0
     @Published var activeTasks: [CodexTaskItem] = []
     @Published var todayTokens = 0
+    @Published var todayTokensByModel: [String: Int] = [:]
     @Published var usageLimit: CodexUsageLimit?
     @Published var completionMessage: String?
     @Published var completedTask: CodexTaskItem?
@@ -197,6 +198,28 @@ final class NotchModel: ObservableObject {
         return todayTokens >= 100_000 ? "\(value) 🔥" : value
     }
 
+    var todayModelUsageText: String? {
+        let values = todayTokensByModel
+            .filter { $0.value > 0 }
+            .sorted { $0.value > $1.value }
+            .prefix(2)
+            .map { "\(shortModelName($0.key)) \(compactTokens($0.value))" }
+        return values.isEmpty ? nil : values.joined(separator: " · ")
+    }
+
+    private func shortModelName(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "gpt-", with: "")
+            .replacingOccurrences(of: "-sol", with: " Sol")
+            .replacingOccurrences(of: "-terra", with: " Terra")
+    }
+
+    private func compactTokens(_ tokens: Int) -> String {
+        if tokens >= 1_000_000 { return String(format: "%.1fM", Double(tokens) / 1_000_000) }
+        if tokens >= 1_000 { return String(format: "%.1fK", Double(tokens) / 1_000) }
+        return "\(tokens)"
+    }
+
     var remainingUsageText: String {
         guard let remainingUsagePercent else { return "--" }
         return "\(remainingUsagePercent)%"
@@ -276,7 +299,7 @@ final class NotchModel: ObservableObject {
         case .idle: CGSize(width: 310, height: 38)
         case .compactIdle: CGSize(width: 270, height: 36)
         case .collapsedCompletion: CGSize(width: 322, height: 38)
-        case .usage: CGSize(width: 450, height: 112)
+        case .usage: CGSize(width: 450, height: 120)
         case .drop: CGSize(width: 450, height: 138)
         case .settings: CGSize(width: 450, height: 174)
         case .task: CGSize(width: 450, height: 86)
@@ -465,6 +488,9 @@ final class NotchModel: ObservableObject {
         }
         if todayTokens != snapshot.todayTokens {
             todayTokens = snapshot.todayTokens
+        }
+        if todayTokensByModel != snapshot.todayTokensByModel {
+            todayTokensByModel = snapshot.todayTokensByModel
         }
         if usageLimit != snapshot.usageLimit {
             usageLimit = snapshot.usageLimit

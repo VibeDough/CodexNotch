@@ -384,6 +384,12 @@ struct NotchView: View {
                     Text(model.todayTokenText)
                         .font(.system(size: 16, weight: .black, design: .rounded))
                         .foregroundStyle(.white)
+                    if let breakdown = model.todayModelUsageText {
+                        Text(breakdown)
+                            .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.42))
+                            .lineLimit(1)
+                    }
                 }
                 Spacer(minLength: 10)
                 Button(action: model.openCodex) {

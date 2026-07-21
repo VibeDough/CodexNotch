@@ -45,4 +45,17 @@ import Testing
         #expect(accumulator.dailyTokens == 0)
         #expect(accumulator.latestLimit == limit)
     }
+
+    @Test func attributesTokenIncrementsToCurrentModel() {
+        let start = Date(timeIntervalSince1970: 86_400)
+        var accumulator = CodexUsageAccumulator(dayStart: start, dayEnd: start.addingTimeInterval(86_400))
+
+        accumulator.setModel("gpt-5.6-sol")
+        accumulator.ingest(total: 100, at: start.addingTimeInterval(10), limit: nil)
+        accumulator.setModel("gpt-5.6-terra")
+        accumulator.ingest(total: 160, at: start.addingTimeInterval(20), limit: nil)
+
+        #expect(accumulator.dailyTokensByModel["gpt-5.6-sol"] == 100)
+        #expect(accumulator.dailyTokensByModel["gpt-5.6-terra"] == 60)
+    }
 }

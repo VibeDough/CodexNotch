@@ -13,6 +13,7 @@ struct CodexStatusSnapshot {
     let activeCount: Int
     let tasks: [CodexTaskItem]
     let todayTokens: Int
+    let todayTokensByModel: [String: Int]
     let usageLimit: CodexUsageLimit?
     let completedTask: CodexTaskItem?
     let viewedThread: CodexViewedThread?
@@ -62,6 +63,8 @@ private struct UsageCacheEntry {
     let dayStart: Date
     let readOffset: UInt64
     let lastTotal: Int?
+    let tokensByModel: [String: Int]
+    let currentModel: String?
 }
 
 private struct ThreadMetadata {
@@ -73,6 +76,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
     private let sessionsURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".codex/sessions", isDirectory: true)
     private var cachedTodayTokens = 0
+    private var cachedTodayTokensByModel: [String: Int] = [:]
     private var cachedUsageLimit: CodexUsageLimit?
     private var pendingConfirmations: [String: MonitoredRollout] = [:]
     private var activityCache: [URL: ActivityCacheEntry] = [:]
@@ -99,13 +103,13 @@ final class CodexTaskMonitor: @unchecked Sendable {
         if let completion = rollouts.first(where: {
             $0.activity.phase == .completed && Date().timeIntervalSince($0.activity.eventDate) < 8
         }) {
-            return CodexStatusSnapshot(primary: completion.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: completion.task, viewedThread: desktopState.viewedThread, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
+            return CodexStatusSnapshot(primary: completion.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, todayTokensByModel: usageStats.byModel, usageLimit: usageStats.limit, completedTask: completion.task, viewedThread: desktopState.viewedThread, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
         }
         if let active = rollouts.first(where: { [.running, .review, .waiting, .failed].contains($0.activity.phase) }) {
-            return CodexStatusSnapshot(primary: active.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
+            return CodexStatusSnapshot(primary: active.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, todayTokensByModel: usageStats.byModel, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
         }
         let idle = CodexActivity(phase: .idle, label: AppLanguage.text("Codex 空闲", "Codex idle"), eventDate: .distantPast, startedAt: nil)
-        return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
+        return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, todayTokensByModel: usageStats.byModel, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
     }
 
     func hasDesktopActivity(since date: Date) -> Bool {
@@ -253,12 +257,13 @@ final class CodexTaskMonitor: @unchecked Sendable {
         return bySession.values.sorted { $0.activity.eventDate > $1.activity.eventDate }
     }
 
-    private func todayUsageStats(recentURLs: [URL]) -> (tokens: Int, limit: CodexUsageLimit?) {
+    private func todayUsageStats(recentURLs: [URL]) -> (tokens: Int, byModel: [String: Int], limit: CodexUsageLimit?) {
         let calendar = Calendar.current
         let dayStart = calendar.startOfDay(for: Date())
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart)!
         var newestLimitDate = Date.distantPast
         var newestLimit: CodexUsageLimit?
+        var byModel: [String: Int] = [:]
         cachedTodayTokens = recentURLs.reduce(into: 0) { total, url in
             guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
                   let date = values.contentModificationDate else { return }
@@ -277,6 +282,9 @@ final class CodexTaskMonitor: @unchecked Sendable {
             }
             if calendar.isDateInToday(date) {
                 total += entry.tokens
+                for (model, tokens) in entry.tokensByModel {
+                    byModel[model, default: 0] += tokens
+                }
             }
             if entry.limitDate > newestLimitDate {
                 newestLimitDate = entry.limitDate
@@ -286,7 +294,8 @@ final class CodexTaskMonitor: @unchecked Sendable {
         let retained = Set(recentURLs)
         usageCache = usageCache.filter { retained.contains($0.key) }
         cachedUsageLimit = newestLimit
-        return (cachedTodayTokens, cachedUsageLimit)
+        cachedTodayTokensByModel = byModel
+        return (cachedTodayTokens, cachedTodayTokensByModel, cachedUsageLimit)
     }
 
     private func readUsageEntry(
@@ -297,7 +306,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
         previous: UsageCacheEntry?
     ) -> UsageCacheEntry {
         guard let handle = try? FileHandle(forReadingFrom: url) else {
-            return UsageCacheEntry(modifiedAt: modifiedAt, tokens: 0, limit: nil, limitDate: .distantPast, dayStart: dayStart, readOffset: 0, lastTotal: nil)
+            return UsageCacheEntry(modifiedAt: modifiedAt, tokens: 0, limit: nil, limitDate: .distantPast, dayStart: dayStart, readOffset: 0, lastTotal: nil, tokensByModel: [:], currentModel: nil)
         }
         defer { try? handle.close() }
         let length = (try? handle.seekToEnd()) ?? 0
@@ -316,15 +325,22 @@ final class CodexTaskMonitor: @unchecked Sendable {
             dayStart: dayStart,
             dayEnd: dayEnd,
             dailyTokens: canContinue ? previous?.tokens ?? 0 : 0,
+            dailyTokensByModel: canContinue ? previous?.tokensByModel ?? [:] : [:],
             latestLimit: canContinue ? previous?.limit : nil,
             latestLimitDate: canContinue ? previous?.limitDate ?? .distantPast : .distantPast,
-            previousTotal: canContinue ? previous?.lastTotal : nil
+            previousTotal: canContinue ? previous?.lastTotal : nil,
+            currentModel: canContinue ? previous?.currentModel : nil
         )
         enumerateLines(in: handle) { line in
             guard let data = line.data(using: .utf8),
                   let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let payload = object["payload"] as? [String: Any],
-                  payload["type"] as? String == "token_count",
+                  let type = payload["type"] as? String else { return }
+            if type == "turn_context" {
+                if let model = payload["model"] as? String { accumulator.setModel(model) }
+                return
+            }
+            guard type == "token_count",
                   let info = payload["info"] as? [String: Any],
                   let usage = info["total_token_usage"] as? [String: Any],
                   let tokenNumber = usage["total_tokens"] as? NSNumber else { return }
@@ -348,7 +364,9 @@ final class CodexTaskMonitor: @unchecked Sendable {
             limitDate: accumulator.latestLimitDate,
             dayStart: dayStart,
             readOffset: length,
-            lastTotal: accumulator.previousTotal
+            lastTotal: accumulator.previousTotal,
+            tokensByModel: accumulator.dailyTokensByModel,
+            currentModel: accumulator.currentModel
         )
     }
 
@@ -361,9 +379,10 @@ final class CodexTaskMonitor: @unchecked Sendable {
     ) -> UsageCacheEntry {
         var offset = length
         var suffix = Data()
-        var events: [(total: Int, date: Date, limit: CodexUsageLimit?)] = []
+        var events: [UsageLogEvent] = []
         var foundBaseline = false
-        while offset > 0, !foundBaseline {
+        var foundModelBeforeBaseline = false
+        while offset > 0, !(foundBaseline && foundModelBeforeBaseline) {
             let count = min(UInt64(262_144), offset)
             offset -= count
             try? handle.seek(toOffset: offset)
@@ -377,20 +396,27 @@ final class CodexTaskMonitor: @unchecked Sendable {
                 suffix.removeAll(keepingCapacity: true)
             }
             for line in lines.reversed() {
-                guard let event = usageEvent(from: String(decoding: line, as: UTF8.self), fallbackDate: modifiedAt) else {
-                    continue
-                }
+                let value = String(decoding: line, as: UTF8.self)
+                guard let event = usageLogEvent(from: value, fallbackDate: modifiedAt) else { continue }
                 events.append(event)
-                if event.date < dayStart {
+                switch event {
+                case .model where foundBaseline:
+                    foundModelBeforeBaseline = true
+                case let .tokens(_, date, _) where date < dayStart:
                     foundBaseline = true
+                default:
                     break
                 }
+                if foundBaseline, foundModelBeforeBaseline { break }
             }
         }
 
         var accumulator = CodexUsageAccumulator(dayStart: dayStart, dayEnd: dayEnd)
         for event in events.reversed() {
-            accumulator.ingest(total: event.total, at: event.date, limit: event.limit)
+            switch event {
+            case let .model(model): accumulator.setModel(model)
+            case let .tokens(total, date, limit): accumulator.ingest(total: total, at: date, limit: limit)
+            }
         }
         return UsageCacheEntry(
             modifiedAt: modifiedAt,
@@ -399,8 +425,27 @@ final class CodexTaskMonitor: @unchecked Sendable {
             limitDate: accumulator.latestLimitDate,
             dayStart: dayStart,
             readOffset: length,
-            lastTotal: accumulator.previousTotal
+            lastTotal: accumulator.previousTotal,
+            tokensByModel: accumulator.dailyTokensByModel,
+            currentModel: accumulator.currentModel
         )
+    }
+
+    private enum UsageLogEvent {
+        case model(String)
+        case tokens(Int, Date, CodexUsageLimit?)
+    }
+
+    private func usageLogEvent(from line: String, fallbackDate: Date) -> UsageLogEvent? {
+        guard let data = line.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let payload = object["payload"] as? [String: Any],
+              let type = payload["type"] as? String else { return nil }
+        if type == "turn_context", let model = payload["model"] as? String {
+            return .model(model)
+        }
+        guard let event = usageEvent(from: line, fallbackDate: fallbackDate) else { return nil }
+        return .tokens(event.total, event.date, event.limit)
     }
 
     private func enumerateLines(in handle: FileHandle, body: (String) -> Void) {
