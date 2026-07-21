@@ -742,10 +742,10 @@ private struct NotchSettingsContent: View {
             settingRow(
                 icon: "rectangle.2.swap",
                 title: text("共存", "Coexistence"),
-                detail: text("检测到其他刘海应用时自动避让", "Avoid other notch apps"),
+                detail: text("识别 BoringNotch 与 NotchNook", "Detect BoringNotch and NotchNook"),
                 value: coexistenceMode == CoexistenceMode.alwaysShow.rawValue
                     ? text("始终显示", "Always show")
-                    : text("自动避让", "Automatic")
+                    : text("检测后询问", "Ask when detected")
             ) {
                 coexistenceMode = coexistenceMode == CoexistenceMode.automatic.rawValue
                     ? CoexistenceMode.alwaysShow.rawValue : CoexistenceMode.automatic.rawValue

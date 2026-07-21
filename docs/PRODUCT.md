@@ -77,7 +77,7 @@ open "dist/CodexNotch.app"
 - 默认优先显示在内建刘海屏。
 - 可在设置中切换目标屏幕。
 - 无刘海屏采用薄顶部胶囊。
-- 检测到其他刘海应用时可自动避让。
+- 检测到 BoringNotch 或 NotchNook 时询问是否暂时隐藏 CodexNotch，不会擅自关闭其他应用。
 
 ## 6. 隐私
 

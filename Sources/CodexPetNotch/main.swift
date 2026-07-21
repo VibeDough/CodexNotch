@@ -3,11 +3,23 @@ import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+    private struct KnownNotchApp {
+        let name: String
+        let bundleIdentifier: String
+    }
+
+    private static let knownNotchApps = [
+        KnownNotchApp(name: "BoringNotch", bundleIdentifier: "theboringteam.boringnotch"),
+        KnownNotchApp(name: "NotchNook", bundleIdentifier: "lo.cafe.NotchNook")
+    ]
+
     private var panel: NotchPanel?
     private var hostingView: NSHostingView<NotchView>?
     private var environmentTimer: Timer?
     private var hoverTimer: Timer?
     private var pendingResizeTask: Task<Void, Never>?
+    private var conflictDecisions: [String: Bool] = [:]
+    private var isPresentingConflictPrompt = false
     private let model = NotchModel()
     private let preferences = AppPreferences()
 
@@ -89,13 +101,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func refreshPresentation(reposition: Bool) {
         guard let panel, let screen = preferences.targetScreen() else { return }
         model.setCompactBar(screen.safeAreaInsets.top <= 0)
-        let conflict = !NSRunningApplication.runningApplications(
-            withBundleIdentifier: "theboringteam.boringnotch"
-        ).isEmpty
+        let conflicts = Self.knownNotchApps.filter {
+            !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleIdentifier).isEmpty
+        }
+        let activeBundleIdentifiers = Set(conflicts.map(\.bundleIdentifier))
+        conflictDecisions = conflictDecisions.filter { activeBundleIdentifiers.contains($0.key) }
         let fullscreen = hasFullscreenWindow(on: screen)
         let hasImportantStatus = model.activeTaskCount > 0 || model.visibleCompletionMessage != nil
         let hiddenByConflict = preferences.coexistenceMode == .menuBarOnly
-            || (preferences.coexistenceMode == .automatic && conflict)
+            || (preferences.coexistenceMode == .automatic
+                && conflicts.contains { conflictDecisions[$0.bundleIdentifier] == true })
         let hiddenByFullscreen = fullscreen && !hasImportantStatus
 
         if hiddenByConflict || hiddenByFullscreen {
@@ -106,6 +121,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             panel.orderFrontRegardless()
         }
+
+        if preferences.coexistenceMode == .automatic,
+           !isPresentingConflictPrompt,
+           let conflict = conflicts.first(where: { conflictDecisions[$0.bundleIdentifier] == nil }) {
+            presentConflictPrompt(for: conflict)
+        }
+    }
+
+    private func presentConflictPrompt(for app: KnownNotchApp) {
+        isPresentingConflictPrompt = true
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = AppLanguage.text(
+            "检测到 \(app.name) 正在使用刘海区域",
+            "\(app.name) is using the notch area"
+        )
+        alert.informativeText = AppLanguage.text(
+            "是否暂时隐藏 CodexNotch？不会关闭或修改 \(app.name)。",
+            "Temporarily hide CodexNotch? \(app.name) will not be closed or changed."
+        )
+        alert.addButton(withTitle: AppLanguage.text("暂时隐藏", "Hide CodexNotch"))
+        alert.addButton(withTitle: AppLanguage.text("继续同时显示", "Keep Both Visible"))
+        NSApp.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+        conflictDecisions[app.bundleIdentifier] = response == .alertFirstButtonReturn
+        isPresentingConflictPrompt = false
+        refreshPresentation(reposition: false)
     }
 
     private func refreshPointerHover() {
