@@ -1,7 +1,7 @@
 import Foundation
 
 struct CodexActivity: Equatable {
-    enum Phase: Equatable { case idle, running, review, waiting, completed, failed }
+    enum Phase: Equatable { case idle, running, review, inputRequired, waiting, completed, failed }
     let phase: Phase
     let label: String
     let eventDate: Date
@@ -72,6 +72,31 @@ private struct ThreadMetadata {
     let description: String
 }
 
+enum CodexUserInputLogEvent: Equatable {
+    case requested(id: String, question: String?)
+    case answered(id: String)
+}
+
+struct CodexUserInputTracker {
+    private(set) var pending: [(id: String, question: String?)] = []
+
+    var isWaiting: Bool { !pending.isEmpty }
+    var firstQuestion: String? { pending.first?.question }
+
+    mutating func ingest(_ event: CodexUserInputLogEvent) -> Bool {
+        switch event {
+        case let .requested(id, question):
+            pending.removeAll { $0.id == id }
+            pending.append((id, question))
+            return true
+        case let .answered(id):
+            guard pending.contains(where: { $0.id == id }) else { return false }
+            pending.removeAll { $0.id == id }
+            return true
+        }
+    }
+}
+
 final class CodexTaskMonitor: @unchecked Sendable {
     private let sessionsURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".codex/sessions", isDirectory: true)
@@ -98,14 +123,14 @@ final class CodexTaskMonitor: @unchecked Sendable {
         let observedRollouts = recentRolloutURLs.prefix(8).compactMap(cachedActivity(for:))
         let rollouts = reconciledRollouts(observedRollouts)
         let usageStats = todayUsageStats(recentURLs: recentRolloutURLs)
-        let activePhases: [CodexActivity.Phase] = [.running, .review, .waiting]
+        let activePhases: [CodexActivity.Phase] = [.running, .review, .inputRequired, .waiting]
         let tasks = rollouts.filter { activePhases.contains($0.activity.phase) }.map(\.task)
         if let completion = rollouts.first(where: {
             $0.activity.phase == .completed && Date().timeIntervalSince($0.activity.eventDate) < 8
         }) {
             return CodexStatusSnapshot(primary: completion.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, todayTokensByModel: usageStats.byModel, usageLimit: usageStats.limit, completedTask: completion.task, viewedThread: desktopState.viewedThread, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
         }
-        if let active = rollouts.first(where: { [.running, .review, .waiting, .failed].contains($0.activity.phase) }) {
+        if let active = rollouts.first(where: { [.running, .review, .inputRequired, .waiting, .failed].contains($0.activity.phase) }) {
             return CodexStatusSnapshot(primary: active.activity, activeCount: tasks.count, tasks: tasks, todayTokens: usageStats.tokens, todayTokensByModel: usageStats.byModel, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
         }
         let idle = CodexActivity(phase: .idle, label: AppLanguage.text("Codex 空闲", "Codex idle"), eventDate: .distantPast, startedAt: nil)
@@ -239,7 +264,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
 
     private func reconciledRollouts(_ observed: [MonitoredRollout]) -> [MonitoredRollout] {
         for rollout in observed {
-            if rollout.activity.phase == .waiting {
+            if rollout.activity.phase == .waiting || rollout.activity.phase == .inputRequired {
                 pendingConfirmations[rollout.task.id] = rollout
             } else {
                 pendingConfirmations.removeValue(forKey: rollout.task.id)
@@ -247,7 +272,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
         }
 
         var bySession = Dictionary(uniqueKeysWithValues: pendingConfirmations.map { ($0.key, $0.value) })
-        for rollout in observed where rollout.activity.phase != .waiting {
+        for rollout in observed where rollout.activity.phase != .waiting && rollout.activity.phase != .inputRequired {
             if let current = bySession[rollout.task.id],
                current.activity.eventDate > rollout.activity.eventDate {
                 continue
@@ -511,6 +536,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
         var totalTokens: Int?
         var lastUserMessage: String?
         var sawLifecycleEvent = false
+        var userInputTracker = CodexUserInputTracker()
 
         for line in text.split(separator: "\n") {
             guard let data = line.data(using: .utf8),
@@ -521,6 +547,27 @@ final class CodexTaskMonitor: @unchecked Sendable {
             if let timestamp = object["timestamp"] as? String,
                let parsed = Self.parseDate(timestamp) {
                 lastEventDate = parsed
+            }
+
+            if let event = Self.userInputEvent(from: payload) {
+                let matched = userInputTracker.ingest(event)
+                let clearsPreviousRequest: Bool
+                if case .answered = event {
+                    clearsPreviousRequest = previous?.activity.phase == .inputRequired
+                } else {
+                    clearsPreviousRequest = false
+                }
+                if matched || clearsPreviousRequest {
+                    sawLifecycleEvent = true
+                    if userInputTracker.isWaiting {
+                        lastPhase = .inputRequired
+                        lastLabel = AppLanguage.text("需要用户输入", "Input required")
+                    } else {
+                        lastPhase = .review
+                        lastLabel = AppLanguage.text("Codex 正在分析", "Codex is analyzing")
+                    }
+                    continue
+                }
             }
 
             switch type {
@@ -566,7 +613,10 @@ final class CodexTaskMonitor: @unchecked Sendable {
                     lastPhase = .review
                     lastLabel = AppLanguage.text("Codex 正在完成绘图", "Codex is finishing the image")
                 }
-            case "elicitation_request", "request_user_input", "approval_request":
+            case "request_user_input":
+                sawLifecycleEvent = true
+                lastPhase = .inputRequired; lastLabel = AppLanguage.text("需要用户输入", "Input required")
+            case "elicitation_request", "approval_request":
                 sawLifecycleEvent = true
                 lastPhase = .waiting; lastLabel = AppLanguage.text("等待你的确认", "Waiting for your confirmation")
             case "error", "turn_aborted":
@@ -580,7 +630,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
             lastLabel = lastMessage.map(Self.summary) ?? AppLanguage.text("任务完成", "Task completed")
         } else if !sawLifecycleEvent,
                   let previous,
-                  [.running, .review, .waiting].contains(previous.activity.phase) {
+                  [.running, .review, .inputRequired, .waiting].contains(previous.activity.phase) {
             // Image generation can append a single multi-megabyte Base64 line.
             // The bounded tail reader may then begin inside that line, so keep
             // the last active phase until a later lifecycle event is visible.
@@ -595,7 +645,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
             startedAt: taskStartedAt
         )
         let age = Date().timeIntervalSince(lastEventDate)
-        if lastPhase == .waiting {
+        if lastPhase == .waiting || lastPhase == .inputRequired {
             guard age < 7 * 86_400 else { return nil }
         } else if [.running, .review, .failed].contains(lastPhase) {
             guard age < 6 * 3_600 else { return nil }
@@ -605,7 +655,8 @@ final class CodexTaskMonitor: @unchecked Sendable {
             title: threadMetadata[sessionID].map { Self.shortText($0.title, limit: 24) }
                 ?? Self.taskTitle(lastUserMessage)
                 ?? project,
-            detail: lastMessage.map(Self.summary)
+            detail: userInputTracker.firstQuestion.map(Self.summary)
+                ?? lastMessage.map(Self.summary)
                 ?? threadMetadata[sessionID].map { Self.shortText($0.description, limit: 38) }
                 ?? project,
             project: project,
@@ -617,6 +668,31 @@ final class CodexTaskMonitor: @unchecked Sendable {
             lastActivityAt: activity.eventDate
         )
         return MonitoredRollout(activity: activity, task: task)
+    }
+
+    static func userInputQuestion(from arguments: String?) -> String? {
+        guard let arguments,
+              let data = arguments.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let questions = object["questions"] as? [[String: Any]] else { return nil }
+        return questions.compactMap { $0["question"] as? String }.first { !$0.isEmpty }
+    }
+
+    static func userInputEvent(from payload: [String: Any]) -> CodexUserInputLogEvent? {
+        switch payload["type"] as? String {
+        case "function_call":
+            guard payload["name"] as? String == "request_user_input",
+                  let callID = payload["call_id"] as? String else { return nil }
+            return .requested(
+                id: callID,
+                question: userInputQuestion(from: payload["arguments"] as? String)
+            )
+        case "function_call_output":
+            guard let callID = payload["call_id"] as? String else { return nil }
+            return .answered(id: callID)
+        default:
+            return nil
+        }
     }
 
     private static func sessionID(from file: URL) -> String? {

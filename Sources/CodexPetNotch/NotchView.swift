@@ -26,7 +26,11 @@ struct NotchView: View {
         VStack(spacing: 0) {
             collapsedBar
 
-            if let task = model.waitingTask {
+            if model.isTaskDisplayCollapsed, model.primaryTask != nil {
+                EmptyView()
+            } else if let task = model.inputRequiredTask {
+                inputRequiredCard(task)
+            } else if let task = model.waitingTask {
                 confirmationCard(task)
             } else if model.isExpanded {
                 EmptyView()
@@ -72,8 +76,9 @@ struct NotchView: View {
                 IslandShape(
                     shoulder: 0,
                     bottomRadius: showsDetails || model.primaryTask != nil
+                        && !model.isTaskDisplayCollapsed
                         || (model.visibleCompletionMessage != nil && !model.isCompletionStackCollapsed)
-                        || model.waitingTask != nil || model.isExpanded ? 18 : 12
+                        || model.inputRequiredTask != nil || model.waitingTask != nil || model.isExpanded ? 18 : 12
                 )
                 .fill(.black)
             }
@@ -141,11 +146,17 @@ struct NotchView: View {
             .buttonStyle(.plain)
             .help(text("打开 Codex", "Open Codex"))
 
-            Spacer(minLength: 92)
+            Spacer(minLength: model.isTaskDisplayCollapsed && model.primaryTask != nil ? 220 : 92)
 
             ZStack {
                 Group {
-                    if model.hasCollapsedCompletion {
+                    if model.isTaskDisplayCollapsed, model.primaryTask != nil {
+                        Button(action: model.toggleTaskDisplayCollapsed) {
+                            taskStatus
+                        }
+                        .buttonStyle(.plain)
+                        .help(text("展开任务详情", "Show task details"))
+                    } else if model.hasCollapsedCompletion {
                         Button(action: model.toggleCompletionStackCollapsed) {
                             completionCountBadge
                         }
@@ -165,9 +176,9 @@ struct NotchView: View {
                         taskStatus
                     }
                 }
-                .opacity(model.isHovered && !model.hasCollapsedCompletion ? 0 : 1)
+                .opacity(model.isHovered && !model.hasCollapsedCompletion && !model.isTaskDisplayCollapsed ? 0 : 1)
 
-                if model.isHovered && !model.hasCollapsedCompletion {
+                if model.isHovered && !model.hasCollapsedCompletion && !model.isTaskDisplayCollapsed {
                     HStack(spacing: 8) {
                         Button(action: model.toggleSettings) {
                             Image(systemName: "gearshape.fill")
@@ -200,7 +211,7 @@ struct NotchView: View {
                     .transition(.scale(scale: 0.86, anchor: .trailing).combined(with: .opacity))
                 }
             }
-            .frame(width: 68, height: 28)
+            .frame(width: model.isTaskDisplayCollapsed && model.primaryTask != nil ? 76 : 68, height: 28)
             .animation(.easeOut(duration: 0.14), value: model.isHovered)
         }
         .padding(.horizontal, 10)
@@ -239,9 +250,9 @@ struct NotchView: View {
     @ViewBuilder
     private var edgeStatusGlow: some View {
         if model.connectionState == .disconnected || model.connectionState == .reconnecting {
-            EdgeGlowBorder(compact: model.usesCompactBar, expanded: showsDetails || model.primaryTask != nil, animated: false, color: .red)
+            EdgeGlowBorder(compact: model.usesCompactBar, expanded: showsDetails || (model.primaryTask != nil && !model.isTaskDisplayCollapsed), animated: false, color: .red)
         } else if model.activeTaskCount > 0 || model.connectionState == .reconnected {
-            EdgeGlowBorder(compact: model.usesCompactBar, expanded: showsDetails || model.primaryTask != nil, animated: true, color: .cyan)
+            EdgeGlowBorder(compact: model.usesCompactBar, expanded: showsDetails || (model.primaryTask != nil && !model.isTaskDisplayCollapsed), animated: true, color: .cyan)
         }
     }
 
@@ -258,8 +269,13 @@ struct NotchView: View {
                 .foregroundStyle(.white)
                 .contentTransition(.numericText())
                 .offset(y: -1.5)
+            if model.isTaskDisplayCollapsed, model.primaryTask != nil {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 7.5, weight: .black))
+                    .foregroundStyle(.white.opacity(0.62))
+            }
         }
-        .frame(width: 68, height: 28, alignment: .trailing)
+        .frame(width: model.isTaskDisplayCollapsed && model.primaryTask != nil ? 76 : 68, height: 28, alignment: .trailing)
         .accessibilityLabel(text("正在执行 \(model.activeTaskCount) 个任务", "\(model.activeTaskCount) active tasks"))
     }
 
@@ -285,6 +301,7 @@ struct NotchView: View {
         guard model.activeTaskCount > 0 else { return text("空闲", "Idle") }
         if hasStaleActiveTask { return text("较久", "Quiet") }
         return switch currentActivePhase {
+        case .inputRequired: text("需输入", "Input")
         case .waiting: text("等待", "Wait")
         case .failed: text("异常", "Issue")
         case .review: text("分析", "Review")
@@ -298,6 +315,7 @@ struct NotchView: View {
         guard model.activeTaskCount > 0 else { return .white.opacity(0.3) }
         if hasStaleActiveTask { return .orange }
         return switch currentActivePhase {
+        case .inputRequired: .orange
         case .waiting: .orange
         case .failed: .red
         default: .green
@@ -305,7 +323,7 @@ struct NotchView: View {
     }
 
     private var currentActivePhase: CodexActivity.Phase? {
-        let priority: [CodexActivity.Phase] = [.waiting, .failed, .review, .running]
+        let priority: [CodexActivity.Phase] = [.inputRequired, .waiting, .failed, .review, .running]
         return priority.first { phase in model.activeTasks.contains { $0.phase == phase } }
     }
 
@@ -440,6 +458,7 @@ struct NotchView: View {
         return switch phase {
         case .running: text("运行中", "Running")
         case .review: text("分析中", "Analyzing")
+        case .inputRequired: text("需要输入", "Input required")
         case .waiting: text("等待确认", "Waiting")
         case .completed: text("已完成", "Completed")
         case .failed: text("遇到问题", "Issue")
@@ -468,6 +487,7 @@ struct NotchView: View {
         if model.connectionState == .reconnected { return .cyan }
         if isTaskStale(task) { return .orange }
         return switch task.phase {
+        case .inputRequired: .orange
         case .waiting: .orange
         case .failed: .red
         default: .green
@@ -503,56 +523,70 @@ struct NotchView: View {
     }
 
     private func persistentTaskStatus(_ task: CodexTaskItem) -> some View {
-        Button {
-            if model.activeTasks.count > 1 {
-                model.toggleTaskStatusPinned()
-            } else {
-                model.openTask(task)
-            }
-        } label: {
-            HStack(spacing: 9) {
-                Circle()
-                    .fill(statusColor(task))
-                    .frame(width: 7, height: 7)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(task.title)
-                        .font(.system(size: 10.5, weight: .bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    Text(task.detail)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.white.opacity(0.5))
-                        .lineLimit(1)
+        HStack(spacing: 2) {
+            Button {
+                if model.activeTasks.count > 1 {
+                    model.toggleTaskStatusPinned()
+                } else {
+                    model.openTask(task)
                 }
-                Spacer(minLength: 6)
-                if model.activeTaskCount > 1 {
-                    HStack(spacing: 3) {
-                        Text("+\(model.activeTaskCount - 1)")
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 7.5, weight: .black))
+            } label: {
+                HStack(spacing: 9) {
+                    Circle()
+                        .fill(statusColor(task))
+                        .frame(width: 7, height: 7)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(task.title)
+                            .font(.system(size: 10.5, weight: .bold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Text(task.detail)
+                            .font(.system(size: 9))
+                            .foregroundStyle(.white.opacity(0.5))
+                            .lineLimit(1)
                     }
-                    .font(.system(size: 10, weight: .black, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.82))
-                    .padding(.horizontal, 7)
-                    .frame(height: 22)
-                    .background(.white.opacity(0.1), in: Capsule())
+                    Spacer(minLength: 6)
+                    if model.activeTaskCount > 1 {
+                        HStack(spacing: 3) {
+                            Text("+\(model.activeTaskCount - 1)")
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 7.5, weight: .black))
+                        }
+                        .font(.system(size: 10, weight: .black, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.82))
+                        .padding(.horizontal, 7)
+                        .frame(height: 22)
+                        .background(.white.opacity(0.1), in: Capsule())
+                    }
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(modelName(task.model))
+                        Text(taskUsageLine(task))
+                            .foregroundStyle(.white.opacity(0.45))
+                    }
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.75))
                 }
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(modelName(task.model))
-                    Text(taskUsageLine(task))
-                        .foregroundStyle(.white.opacity(0.45))
-                }
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.75))
+                .padding(.leading, 13)
+                .padding(.trailing, 4)
+                .frame(maxWidth: .infinity, minHeight: 42)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 13)
-            .frame(maxWidth: .infinity, minHeight: 42)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .help(model.activeTaskCount > 1
+                ? text("展开全部任务", "Show all tasks")
+                : text("返回 Codex 对话", "Return to Codex conversation"))
+
+            Button(action: model.toggleTaskDisplayCollapsed) {
+                Image(systemName: "chevron.up")
+                    .font(.system(size: 8.5, weight: .black))
+                    .foregroundStyle(.white.opacity(0.62))
+                    .frame(width: 24, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 8)
+            .help(text("收起任务详情", "Collapse task details"))
         }
-        .buttonStyle(.plain)
-        .help(model.activeTaskCount > 1
-            ? text("展开全部任务", "Show all tasks")
-            : text("返回 Codex 对话", "Return to Codex conversation"))
     }
 
     private func completedTaskStatus(message: String, task: CodexTaskItem) -> some View {
@@ -656,6 +690,15 @@ struct NotchView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
+            Button(action: model.toggleTaskDisplayCollapsed) {
+                Image(systemName: "chevron.up")
+                    .font(.system(size: 8.5, weight: .black))
+                    .foregroundStyle(.white.opacity(0.66))
+                    .frame(width: 24, height: 30)
+            }
+            .buttonStyle(.plain)
+            .help(text("收起任务详情", "Collapse task details"))
+
             Button { model.openTask(task) } label: {
                 Image(systemName: "arrow.uturn.backward")
                     .font(.system(size: 13, weight: .bold))
@@ -678,6 +721,59 @@ struct NotchView: View {
         }
         .padding(.horizontal, 13)
         .frame(maxWidth: .infinity, minHeight: 48)
+    }
+
+    private func inputRequiredCard(_ task: CodexTaskItem) -> some View {
+        HStack(spacing: 2) {
+            Button { model.openTask(task) } label: {
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(.orange)
+                        .frame(width: 7, height: 7)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(task.title)
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Text(task.detail.isEmpty
+                             ? text("需要用户输入 · 点击返回对话", "Input required · Open conversation")
+                             : task.detail)
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.55))
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 4)
+
+                    HStack(spacing: 5) {
+                        Text(text("需输入", "Input"))
+                        Image(systemName: "arrow.up.right")
+                    }
+                    .font(.system(size: 9.5, weight: .bold))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 9)
+                    .frame(height: 26)
+                    .background(.orange.opacity(0.14), in: Capsule())
+                }
+                .padding(.leading, 13)
+                .padding(.trailing, 4)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(text("返回对话填写内容", "Return to conversation and respond"))
+
+            Button(action: model.toggleTaskDisplayCollapsed) {
+                Image(systemName: "chevron.up")
+                    .font(.system(size: 8.5, weight: .black))
+                    .foregroundStyle(.white.opacity(0.66))
+                    .frame(width: 24, height: 30)
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 8)
+            .help(text("收起任务详情", "Collapse task details"))
+        }
     }
 
     private var settingsContent: some View {

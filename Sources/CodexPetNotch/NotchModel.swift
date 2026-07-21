@@ -29,9 +29,11 @@ enum NotchPresentationMode: Equatable {
     case usage
     case drop
     case settings
+    case collapsedTask
     case task
     case taskWithCompletion
     case taskList(Int)
+    case inputRequired
     case waiting
     case completion
 }
@@ -53,6 +55,7 @@ final class NotchModel: ObservableObject {
     @Published var isExpanded = false
     @Published var isShowingSettings = false
     @Published var isTaskStatusPinned = false
+    @Published var isTaskDisplayCollapsed = UserDefaults.standard.bool(forKey: "taskDisplayCollapsed")
     @Published var usesCompactBar = false
     @Published var connectionState: CodexConnectionState = .connected
     @Published var isHovered = false
@@ -151,6 +154,13 @@ final class NotchModel: ObservableObject {
         NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
     }
 
+    func toggleTaskDisplayCollapsed() {
+        isTaskDisplayCollapsed.toggle()
+        UserDefaults.standard.set(isTaskDisplayCollapsed, forKey: "taskDisplayCollapsed")
+        if isTaskDisplayCollapsed { isTaskStatusPinned = false }
+        NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
+    }
+
     func collapse() {
         guard isExpanded else { return }
         isExpanded = false
@@ -170,7 +180,7 @@ final class NotchModel: ObservableObject {
 
     var taskRuntimeText: String? {
         guard let startedAt = lastActivity.startedAt,
-              [.running, .review, .waiting].contains(lastActivity.phase) else { return nil }
+              [.running, .review, .inputRequired, .waiting].contains(lastActivity.phase) else { return nil }
         let seconds = max(0, Int(clockTick.timeIntervalSince(startedAt)))
         if seconds >= 3600 {
             return String(format: "%d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60)
@@ -279,7 +289,13 @@ final class NotchModel: ObservableObject {
         activeTasks.first { $0.phase == .waiting }
     }
 
+    var inputRequiredTask: CodexTaskItem? {
+        activeTasks.first { $0.phase == .inputRequired }
+    }
+
     var presentationMode: NotchPresentationMode {
+        if isTaskDisplayCollapsed, primaryTask != nil { return .collapsedTask }
+        if inputRequiredTask != nil { return .inputRequired }
         if waitingTask != nil { return .waiting }
         if isExpanded { return .drop }
         if isShowingSettings { return .settings }
@@ -302,16 +318,18 @@ final class NotchModel: ObservableObject {
         case .usage: CGSize(width: 450, height: 120)
         case .drop: CGSize(width: 450, height: 138)
         case .settings: CGSize(width: 450, height: 174)
+        case .collapsedTask: CGSize(width: 424, height: 44)
         case .task: CGSize(width: 450, height: 86)
         case .taskWithCompletion: CGSize(width: 450, height: 122)
         case let .taskList(count): CGSize(width: 450, height: 80 + CGFloat(count * 40))
+        case .inputRequired: CGSize(width: 450, height: 94)
         case .waiting: CGSize(width: 450, height: 94)
         case .completion: CGSize(width: 450, height: completedTask == nil ? 88 : 86)
         }
     }
 
     var primaryTask: CodexTaskItem? {
-        let priority: [CodexActivity.Phase] = [.waiting, .failed, .review, .running]
+        let priority: [CodexActivity.Phase] = [.inputRequired, .waiting, .failed, .review, .running]
         return priority.lazy.compactMap { phase in
             self.activeTasks.first { $0.phase == phase }
         }.first
@@ -515,6 +533,7 @@ final class NotchModel: ObservableObject {
         case .idle: state = .idle
         case .running: state = .running
         case .review: state = .review
+        case .inputRequired: state = .waiting
         case .waiting: state = .waiting
         case .completed:
             state = .jumping
