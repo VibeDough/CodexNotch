@@ -33,4 +33,16 @@ import Testing
 
         #expect(accumulator.dailyTokens == 100)
     }
+
+    @Test func keepsLatestRateLimitFromBeforeToday() {
+        let start = Date(timeIntervalSince1970: 86_400)
+        let resetAt = start.addingTimeInterval(7 * 86_400)
+        let limit = CodexUsageLimit(usedPercent: 0, resetAt: resetAt, planType: "plus")
+        var accumulator = CodexUsageAccumulator(dayStart: start, dayEnd: start.addingTimeInterval(86_400))
+
+        accumulator.ingest(total: 500, at: start.addingTimeInterval(-60), limit: limit)
+
+        #expect(accumulator.dailyTokens == 0)
+        #expect(accumulator.latestLimit == limit)
+    }
 }

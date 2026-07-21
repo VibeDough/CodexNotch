@@ -164,9 +164,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         let visibleSize = notchSize(expanded: expanded, on: screen)
         guard screen.safeAreaInsets.top > 0 else { return visibleSize }
+        // Keep every standard presentation inside one fixed top-anchored canvas.
+        // Resizing the AppKit panel when settings opens can briefly expose the
+        // desktop between the physical notch and the SwiftUI surface.
         let taskListCanvasHeight = model.activeTasks.count > 1
-            ? 80 + CGFloat(model.activeTasks.count * 40)
-            : 138
+            ? max(174, 80 + CGFloat(model.activeTasks.count * 40))
+            : 174
         return NSSize(
             width: max(450, visibleSize.width),
             height: max(taskListCanvasHeight, visibleSize.height)

@@ -73,7 +73,6 @@ final class CodexTaskMonitor: @unchecked Sendable {
         .appendingPathComponent(".codex/sessions", isDirectory: true)
     private var cachedTodayTokens = 0
     private var cachedUsageLimit: CodexUsageLimit?
-    private var tokenCacheDate = Date.distantPast
     private var pendingConfirmations: [String: MonitoredRollout] = [:]
     private var activityCache: [URL: ActivityCacheEntry] = [:]
     private var usageCache: [URL: UsageCacheEntry] = [:]
@@ -251,9 +250,6 @@ final class CodexTaskMonitor: @unchecked Sendable {
     }
 
     private func todayUsageStats() -> (tokens: Int, limit: CodexUsageLimit?) {
-        guard Date().timeIntervalSince(tokenCacheDate) >= 10 else {
-            return (cachedTodayTokens, cachedUsageLimit)
-        }
         let calendar = Calendar.current
         let dayStart = calendar.startOfDay(for: Date())
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart)!
@@ -262,8 +258,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
         let recentURLs = newestRollouts(limit: 64)
         cachedTodayTokens = recentURLs.reduce(into: 0) { total, url in
             guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
-                  let date = values.contentModificationDate,
-                  calendar.isDateInToday(date) else { return }
+                  let date = values.contentModificationDate else { return }
             let entry: UsageCacheEntry
             if let cached = usageCache[url], cached.modifiedAt == date, cached.dayStart == dayStart {
                 entry = cached
@@ -277,7 +272,9 @@ final class CodexTaskMonitor: @unchecked Sendable {
                 )
                 usageCache[url] = entry
             }
-            total += entry.tokens
+            if calendar.isDateInToday(date) {
+                total += entry.tokens
+            }
             if entry.limitDate > newestLimitDate {
                 newestLimitDate = entry.limitDate
                 newestLimit = entry.limit
@@ -286,7 +283,6 @@ final class CodexTaskMonitor: @unchecked Sendable {
         let retained = Set(recentURLs)
         usageCache = usageCache.filter { retained.contains($0.key) }
         cachedUsageLimit = newestLimit
-        tokenCacheDate = Date()
         return (cachedTodayTokens, cachedUsageLimit)
     }
 

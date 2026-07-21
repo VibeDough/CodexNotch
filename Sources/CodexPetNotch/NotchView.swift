@@ -395,13 +395,18 @@ struct NotchView: View {
                     .foregroundStyle(.white.opacity(0.55))
             }
 
-            HStack {
+            HStack(spacing: 8) {
                 Label(model.remainingUsageStatusText, systemImage: "gauge.with.dots.needle.50percent")
                     .foregroundStyle(expandedUsageColor)
-                Spacer(minLength: 8)
+                    .lineLimit(1)
                 Label(text("重置 \(model.resetCountdownText)", "Resets in \(model.resetCountdownText)"), systemImage: "clock")
-                Spacer(minLength: 8)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .layoutPriority(2)
+                Spacer(minLength: 0)
                 Text(text("版本 \(model.codexVersion)", "Version \(model.codexVersion)"))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
             .font(.system(size: 9.5, weight: .medium))
             .foregroundStyle(.white.opacity(0.56))
