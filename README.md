@@ -1,6 +1,6 @@
 # CodexNotch
 
-一个在 MacBook 刘海区域展示 Codex 任务、用量和连接状态的轻量 macOS 应用。
+CodexNotch 是 Henry恒宇 制作的一款轻量 macOS 工具。它把 Codex 的任务进度、用量和提醒放进 MacBook 刘海：不用一直停留在 Codex，也不会再错过等待输入或任务完成。
 
 [产品主页](https://codexnotch.pages.dev/) · [English](https://codexnotch.pages.dev/en/) · [下载安装](https://github.com/VibeDough/CodexNotch/releases/latest) · [产品文档](docs/PRODUCT.md)
 
@@ -33,6 +33,6 @@ open "dist/CodexNotch.app"
 
 CodexNotch 源代码采用 [GNU GPL v3.0](LICENSE) 开源。你可以使用、研究、修改和分发代码；分发修改版本时，需要遵守 GPLv3 并提供对应源代码。
 
-`CodexNotch` 名称、官方图标和 Logo 不属于 GPL 授权范围。公开分发的 Fork 应使用不同的产品名称和图标，并明确说明不是 49Labs 官方版本。详见 [品牌政策](TRADEMARKS.md)。
+`CodexNotch` 名称、官方图标和 Logo 不属于 GPL 授权范围。公开分发的 Fork 应使用不同的产品名称和图标，并明确说明不是 Henry恒宇 制作的官方版本。官方构建由 GitHub 账号 `VibeDough` 发布，详见 [品牌政策](TRADEMARKS.md)。
 
 欢迎通过 Fork 和 Pull Request 参与，参见 [贡献指南](CONTRIBUTING.md)。

@@ -1,6 +1,6 @@
 # CodexNotch Trademark Policy
 
-The GNU General Public License v3.0 applies to the CodexNotch source code. It does not grant permission to use the CodexNotch name, application icon, logo, or other 49Labs brand assets in a way that suggests endorsement or an official release.
+The GNU General Public License v3.0 applies to the CodexNotch source code. It does not grant permission to use the CodexNotch name, application icon, logo, or other brand assets created by Henry恒宇 in a way that suggests endorsement or an official release.
 
 ## Allowed without separate permission
 
@@ -13,12 +13,12 @@ The GNU General Public License v3.0 applies to the CodexNotch source code. It do
 
 - Distributing a modified build under the name `CodexNotch`.
 - Using the official CodexNotch application icon or logo for a fork or derivative product.
-- Presenting an unofficial build as an official 49Labs release.
-- Using confusingly similar branding that could make users believe a fork is maintained or approved by 49Labs.
+- Presenting an unofficial build as an official release by Henry恒宇.
+- Using confusingly similar branding that could make users believe a fork is maintained or approved by Henry恒宇.
 
-Publicly distributed forks should use a distinct product name and icon and should state clearly that they are unofficial and not endorsed by 49Labs.
+Publicly distributed forks should use a distinct product name and icon and should state clearly that they are unofficial and not endorsed by Henry恒宇.
 
-Official CodexNotch releases are published by the GitHub user `VibeDough` from [github.com/VibeDough/CodexNotch](https://github.com/VibeDough/CodexNotch). Builds published elsewhere are not official unless 49Labs states otherwise.
+CodexNotch is created by Henry恒宇. Official releases are published through the GitHub user `VibeDough` at [github.com/VibeDough/CodexNotch](https://github.com/VibeDough/CodexNotch). Builds published elsewhere are not official unless Henry恒宇 states otherwise.
 
 This policy does not limit rights that applicable law grants independently, such as nominative fair use.
 
