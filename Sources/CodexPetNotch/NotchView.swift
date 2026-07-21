@@ -283,6 +283,7 @@ struct NotchView: View {
     private var currentStatusText: String {
         if model.connectionState == .reconnecting { return text("正在重连", "Retry") }
         guard model.activeTaskCount > 0 else { return text("空闲", "Idle") }
+        if hasStaleActiveTask { return text("较久", "Quiet") }
         return switch currentActivePhase {
         case .waiting: text("等待", "Wait")
         case .failed: text("异常", "Issue")
@@ -295,6 +296,7 @@ struct NotchView: View {
         if model.connectionState == .disconnected || model.connectionState == .reconnecting { return .red }
         if model.connectionState == .reconnected { return .cyan }
         guard model.activeTaskCount > 0 else { return .white.opacity(0.3) }
+        if hasStaleActiveTask { return .orange }
         return switch currentActivePhase {
         case .waiting: .orange
         case .failed: .red
@@ -307,13 +309,17 @@ struct NotchView: View {
         return priority.first { phase in model.activeTasks.contains { $0.phase == phase } }
     }
 
+    private var hasStaleActiveTask: Bool {
+        model.activeTasks.contains(where: isTaskStale)
+    }
+
     private var taskDetails: some View {
         VStack(spacing: 0) {
             ForEach(model.activeTasks) { task in
                 Button { model.openTask(task) } label: {
                     HStack(spacing: 9) {
                         Circle()
-                            .fill(statusColor(task.phase))
+                            .fill(statusColor(task))
                             .frame(width: 6, height: 6)
 
                         VStack(alignment: .leading, spacing: 2) {
@@ -451,14 +457,20 @@ struct NotchView: View {
         return "\(tokens)"
     }
 
-    private func statusColor(_ phase: CodexActivity.Phase) -> Color {
+    private func statusColor(_ task: CodexTaskItem) -> Color {
         if model.connectionState == .disconnected || model.connectionState == .reconnecting { return .red }
         if model.connectionState == .reconnected { return .cyan }
-        return switch phase {
+        if isTaskStale(task) { return .orange }
+        return switch task.phase {
         case .waiting: .orange
         case .failed: .red
         default: .green
         }
+    }
+
+    private func isTaskStale(_ task: CodexTaskItem) -> Bool {
+        guard task.phase == .running || task.phase == .review else { return false }
+        return model.clockTick.timeIntervalSince(task.lastActivityAt) >= 10 * 60
     }
 
     private func modelName(_ value: String) -> String {
@@ -494,7 +506,7 @@ struct NotchView: View {
         } label: {
             HStack(spacing: 9) {
                 Circle()
-                    .fill(statusColor(task.phase))
+                    .fill(statusColor(task))
                     .frame(width: 7, height: 7)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(task.title)

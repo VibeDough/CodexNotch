@@ -41,6 +41,7 @@ struct CodexTaskItem: Identifiable, Equatable {
     let totalTokens: Int?
     let phase: CodexActivity.Phase
     let startedAt: Date?
+    let lastActivityAt: Date
 }
 
 private struct MonitoredRollout {
@@ -567,7 +568,8 @@ final class CodexTaskMonitor: @unchecked Sendable {
             effort: effort,
             totalTokens: totalTokens,
             phase: lastPhase,
-            startedAt: taskStartedAt
+            startedAt: taskStartedAt,
+            lastActivityAt: activity.eventDate
         )
         return MonitoredRollout(activity: activity, task: task)
     }
