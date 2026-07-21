@@ -220,7 +220,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
         if let cached = activityCache[file], cached.modifiedAt == modifiedAt {
             return cached.rollout
         }
-        let rollout = activity(for: file)
+        let rollout = activity(for: file, previous: activityCache[file]?.rollout)
         activityCache[file] = ActivityCacheEntry(modifiedAt: modifiedAt, rollout: rollout)
         if activityCache.count > 24 {
             let retained = Set(newestRollouts(limit: 16))
@@ -437,7 +437,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
         return (tokenNumber.intValue, eventDate, limit)
     }
 
-    private func activity(for file: URL) -> MonitoredRollout? {
+    private func activity(for file: URL, previous: MonitoredRollout?) -> MonitoredRollout? {
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: file.path),
               let modified = attributes[.modificationDate] as? Date,
               let handle = try? FileHandle(forReadingFrom: file) else {
@@ -462,6 +462,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
         var effort = AppLanguage.text("未提供", "Unavailable")
         var totalTokens: Int?
         var lastUserMessage: String?
+        var sawLifecycleEvent = false
 
         for line in text.split(separator: "\n") {
             guard let data = line.data(using: .utf8),
@@ -497,8 +498,10 @@ final class CodexTaskMonitor: @unchecked Sendable {
                     lastUserMessage = message
                 }
             case "task_started":
+                sawLifecycleEvent = true
                 lastPhase = .running; lastLabel = AppLanguage.text("Codex 正在处理", "Codex is working"); taskStartedAt = lastEventDate
             case "task_complete":
+                sawLifecycleEvent = true
                 lastPhase = .completed
                 completionDate = lastEventDate
                 lastLabel = lastMessage.map(Self.summary) ?? AppLanguage.text("任务完成", "Task completed")
@@ -507,10 +510,19 @@ final class CodexTaskMonitor: @unchecked Sendable {
                     lastMessage = message
                 }
             case "agent_reasoning":
+                sawLifecycleEvent = true
                 if lastPhase != .completed { lastPhase = .review; lastLabel = AppLanguage.text("Codex 正在分析", "Codex is analyzing") }
+            case "image_generation_end":
+                sawLifecycleEvent = true
+                if lastPhase != .completed {
+                    lastPhase = .review
+                    lastLabel = AppLanguage.text("Codex 正在完成绘图", "Codex is finishing the image")
+                }
             case "elicitation_request", "request_user_input", "approval_request":
+                sawLifecycleEvent = true
                 lastPhase = .waiting; lastLabel = AppLanguage.text("等待你的确认", "Waiting for your confirmation")
             case "error", "turn_aborted":
+                sawLifecycleEvent = true
                 lastPhase = .failed; lastLabel = AppLanguage.text("任务遇到问题", "Task encountered a problem")
             default:
                 break
@@ -518,6 +530,15 @@ final class CodexTaskMonitor: @unchecked Sendable {
         }
         if lastPhase == .completed {
             lastLabel = lastMessage.map(Self.summary) ?? AppLanguage.text("任务完成", "Task completed")
+        } else if !sawLifecycleEvent,
+                  let previous,
+                  [.running, .review, .waiting].contains(previous.activity.phase) {
+            // Image generation can append a single multi-megabyte Base64 line.
+            // The bounded tail reader may then begin inside that line, so keep
+            // the last active phase until a later lifecycle event is visible.
+            lastPhase = previous.activity.phase
+            lastLabel = previous.activity.label
+            taskStartedAt = previous.activity.startedAt
         }
         let activity = CodexActivity(
             phase: lastPhase,
