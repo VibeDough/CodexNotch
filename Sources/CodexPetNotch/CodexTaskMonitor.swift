@@ -335,7 +335,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
             guard let data = line.data(using: .utf8),
                   let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let payload = object["payload"] as? [String: Any],
-                  let type = payload["type"] as? String else { return }
+                  let type = (payload["type"] as? String) ?? (object["type"] as? String) else { return }
             if type == "turn_context" {
                 if let model = payload["model"] as? String { accumulator.setModel(model) }
                 return
@@ -440,7 +440,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
         guard let data = line.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let payload = object["payload"] as? [String: Any],
-              let type = payload["type"] as? String else { return nil }
+              let type = (payload["type"] as? String) ?? (object["type"] as? String) else { return nil }
         if type == "turn_context", let model = payload["model"] as? String {
             return .model(model)
         }
