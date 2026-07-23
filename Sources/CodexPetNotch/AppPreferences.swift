@@ -2,6 +2,7 @@ import AppKit
 
 extension Notification.Name {
     static let notchPreferencesChanged = Notification.Name("CodexPetNotch.preferencesChanged")
+    static let notchWantsKeyboardFocus = Notification.Name("CodexPetNotch.wantsKeyboardFocus")
 }
 
 enum CoexistenceMode: String {

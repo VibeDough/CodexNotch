@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct NotchView: View {
     @ObservedObject var model: NotchModel
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.system.rawValue
+    @FocusState private var taskSearchFocused: Bool
 
     private func text(_ chinese: String, _ english: String) -> String {
         (AppLanguage(rawValue: appLanguage) ?? .system).usesEnglish ? english : chinese
@@ -20,6 +21,8 @@ struct NotchView: View {
 
     private var showsDetails: Bool {
         showsTaskDetails || showsUsageDetails || model.isShowingSettings
+            || model.isShowingTaskSearch || model.isShowingDailyReport
+            || model.isDailyReportReminderVisible || model.isLowUsageReminderVisible
     }
 
     var body: some View {
@@ -32,10 +35,18 @@ struct NotchView: View {
                 inputRequiredCard(task)
             } else if let task = model.waitingTask {
                 confirmationCard(task)
+            } else if model.isLowUsageReminderVisible {
+                lowUsageReminder
             } else if model.isExpanded {
                 EmptyView()
+            } else if model.isShowingTaskSearch {
+                taskSearchContent
             } else if model.isShowingSettings {
                 settingsContent
+            } else if model.isShowingDailyReport {
+                dailyReportContent
+            } else if model.isDailyReportReminderVisible {
+                dailyReportReminder
             } else if showsTaskDetails {
                 taskDetails
             } else if let task = model.primaryTask {
@@ -93,11 +104,22 @@ struct NotchView: View {
         .animation(.smooth(duration: 0.22), value: model.presentationMode)
         .animation(.smooth(duration: 0.22), value: model.completedTask?.id)
         .animation(.smooth(duration: 0.22), value: model.connectionState)
+        .animation(.smooth(duration: 0.22), value: model.isLowUsageReminderVisible)
         .onChange(of: appLanguage) { _, _ in model.refreshLanguage() }
+        .onChange(of: model.isShowingTaskSearch) { _, showing in
+            guard showing else {
+                taskSearchFocused = false
+                return
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(120))
+                taskSearchFocused = true
+            }
+        }
         .onChange(of: model.isDropTargeted) { _, targeted in
             model.setDropTargeted(targeted)
         }
-        .onDrop(of: [UTType.fileURL, UTType.url, UTType.utf8PlainText], isTargeted: $model.isDropTargeted) {
+        .onDrop(of: [UTType.fileURL, UTType.image, UTType.url, UTType.html, UTType.utf8PlainText], isTargeted: $model.isDropTargeted) {
             model.receive(providers: $0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -148,7 +170,7 @@ struct NotchView: View {
 
             Spacer(minLength: model.isTaskDisplayCollapsed && model.primaryTask != nil ? 220 : 92)
 
-            ZStack {
+            ZStack(alignment: .trailing) {
                 Group {
                     if model.isTaskDisplayCollapsed, model.primaryTask != nil {
                         Button(action: model.toggleTaskDisplayCollapsed) {
@@ -179,7 +201,17 @@ struct NotchView: View {
                 .opacity(model.isHovered && !model.hasCollapsedCompletion && !model.isTaskDisplayCollapsed ? 0 : 1)
 
                 if model.isHovered && !model.hasCollapsedCompletion && !model.isTaskDisplayCollapsed {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 6) {
+                        Button(action: model.showTaskSearch) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 28, height: 28)
+                                .background(.white.opacity(0.1), in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(text("搜索最近任务", "Search recent tasks"))
+
                         Button(action: model.toggleSettings) {
                             Image(systemName: "gearshape.fill")
                                 .font(.system(size: model.isShowingSettings ? 10.5 : 12, weight: .semibold))
@@ -190,6 +222,14 @@ struct NotchView: View {
                                         .fill(model.isShowingSettings ? .white : .white.opacity(0.1))
                                         .frame(width: model.isShowingSettings ? 20 : 28,
                                                height: model.isShowingSettings ? 20 : 28)
+                                }
+                                .overlay(alignment: .topTrailing) {
+                                    if model.availableUpdate != nil {
+                                        Circle()
+                                            .fill(.cyan)
+                                            .frame(width: 6, height: 6)
+                                            .offset(x: 1, y: -1)
+                                    }
                                 }
                         }
                         .buttonStyle(.plain)
@@ -207,11 +247,15 @@ struct NotchView: View {
                         .buttonStyle(.plain)
                         .help(text("退出", "Quit"))
                     }
-                    .frame(width: 64, height: 28)
+                    .frame(width: 96, height: 28)
                     .transition(.scale(scale: 0.86, anchor: .trailing).combined(with: .opacity))
                 }
             }
-            .frame(width: model.isTaskDisplayCollapsed && model.primaryTask != nil ? 76 : 68, height: 28)
+            .frame(
+                width: model.isTaskDisplayCollapsed && model.primaryTask != nil
+                    ? 76 : (model.isHovered ? 100 : 68),
+                height: 28
+            )
             .animation(.easeOut(duration: 0.14), value: model.isHovered)
         }
         .padding(.horizontal, 10)
@@ -443,6 +487,154 @@ struct NotchView: View {
         }
         .padding(.horizontal, 13)
         .padding(.bottom, 11)
+    }
+
+    private var dailyReportReminder: some View {
+        Button(action: model.showDailyReport) {
+            HStack(spacing: 9) {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.cyan)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("\(text("今日", "Today")) \(model.todayTokenText) · \(model.dailyUsageEvaluation)")
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.92))
+                    Text(model.dailyUsageComparisonText)
+                        .font(.system(size: 8.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.45))
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.42))
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 38)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var lowUsageReminder: some View {
+        HStack(spacing: 10) {
+            Text("!")
+                .font(.system(size: 15, weight: .black, design: .rounded))
+                .foregroundStyle(model.remainingUsageLevel == .critical ? .red : .orange)
+
+            LowUsageAnimatedText(
+                value: model.remainingUsageLevel == .critical
+                    ? text("额度即将用尽 \(model.remainingUsageText)", "Usage almost exhausted \(model.remainingUsageText)")
+                    : text("余量不多 \(model.remainingUsageText)", "Usage running low \(model.remainingUsageText)"),
+                color: model.remainingUsageLevel == .critical ? .red : .orange
+            )
+
+            Spacer()
+
+            Button(action: model.dismissLowUsageReminder) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .frame(width: 24, height: 24)
+                    .background(.white.opacity(0.08), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .help(text("关闭", "Dismiss"))
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 38)
+        .transition(.scale(scale: 0.9, anchor: .top).combined(with: .opacity))
+    }
+
+    private var dailyReportContent: some View {
+        VStack(spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(text("Token 能量轨迹", "Token energy"))
+                        .font(.system(size: 12, weight: .bold))
+                    Text("\(model.selectedDailyReportDateText) · \(model.selectedDailyReportTokenText) · \(model.dailyUsageEvaluation)")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.48))
+                }
+                Spacer()
+                Button(action: model.closeDailyReport) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 24, height: 24)
+                        .background(.white.opacity(0.1), in: Circle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            DailyUsageHeatGrid(
+                points: model.dailyUsageHeatPoints,
+                selectedDate: model.selectedDailyReportDate,
+                onSelect: model.selectDailyReportDate
+            )
+            .frame(height: 58)
+
+            HStack(spacing: 9) {
+                Image(systemName: "flame.fill")
+                    .foregroundStyle(.orange)
+                Text(text("连续 \(model.usageStreakDays) 天", "\(model.usageStreakDays)-day streak"))
+                    .fontWeight(.bold)
+                Capsule()
+                    .fill(.white.opacity(0.1))
+                    .frame(height: 4)
+                    .overlay(alignment: .leading) {
+                        GeometryReader { proxy in
+                            Capsule()
+                                .fill(.linearGradient(
+                                    colors: [.orange, .pink, .purple],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                ))
+                                .frame(width: proxy.size.width * CGFloat(model.activeUsageDays) / 14)
+                        }
+                    }
+                Text("\(model.activeUsageDays)/14")
+                    .foregroundStyle(.white.opacity(0.48))
+            }
+            .font(.system(size: 8.5, weight: .semibold))
+            .frame(height: 12)
+
+            DailyUsageEnergyChart(
+                points: model.dailyUsagePoints,
+                average: model.dailyUsageAverage,
+                selectedDate: model.selectedDailyReportDate
+            )
+            .frame(height: 58)
+
+            HStack {
+                Label(model.selectedDailyUsageComparisonText, systemImage: "waveform.path.ecg")
+                Spacer()
+                Text(text("数据仅保存在本机", "Local data only"))
+            }
+            .font(.system(size: 8.5, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.44))
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 12)
+        .overlay {
+            if model.shouldCelebrateDailyReport {
+                DailyReportCelebration()
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    private func reportWeekday(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = AppLanguage.current.usesEnglish
+            ? Locale(identifier: "en_US")
+            : Locale(identifier: "zh_CN")
+        formatter.dateFormat = AppLanguage.current.usesEnglish ? "EE" : "E"
+        return formatter.string(from: date)
+    }
+
+    private func reportDay(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d"
+        return formatter.string(from: date)
     }
 
     private var expandedUsageColor: Color {
@@ -777,9 +969,90 @@ struct NotchView: View {
     }
 
     private var settingsContent: some View {
-        NotchSettingsContent()
+        NotchSettingsContent(model: model)
             .padding(.horizontal, 13)
             .padding(.bottom, 12)
+    }
+
+    private var taskSearchContent: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.white.opacity(0.5))
+                TextField(text("搜索任务或项目", "Search tasks or projects"), text: $model.taskSearchQuery)
+                    .textFieldStyle(.plain)
+                    .focused($taskSearchFocused)
+                    .onSubmit {
+                        if let task = model.taskSearchResults.first {
+                            model.closeTaskSearch()
+                            model.openTask(task)
+                        }
+                    }
+                Button(action: model.closeTaskSearch) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 22, height: 22)
+                        .background(.white.opacity(0.1), in: Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.86))
+            .padding(.horizontal, 10)
+            .frame(height: 34)
+            .background(.white.opacity(0.07), in: Capsule())
+
+            if model.taskSearchResults.isEmpty {
+                VStack(spacing: 5) {
+                    Image(systemName: "text.magnifyingglass")
+                    Text(text("没有找到本地任务", "No local tasks found"))
+                }
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.42))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(model.taskSearchResults) { task in
+                            Button {
+                                model.closeTaskSearch()
+                                model.openTask(task)
+                            } label: {
+                                HStack(spacing: 9) {
+                                    Circle()
+                                        .fill(statusColor(task))
+                                        .frame(width: 6, height: 6)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(task.title)
+                                            .font(.system(size: 10.5, weight: .bold))
+                                            .foregroundStyle(.white.opacity(0.9))
+                                            .lineLimit(1)
+                                        Text("\(task.project) · \(phaseText(task.phase))")
+                                            .font(.system(size: 8.5, weight: .semibold))
+                                            .foregroundStyle(.white.opacity(0.42))
+                                            .lineLimit(1)
+                                    }
+                                    Spacer(minLength: 8)
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.system(size: 8.5, weight: .bold))
+                                        .foregroundStyle(.white.opacity(0.35))
+                                }
+                                .padding(.horizontal, 8)
+                                .frame(height: 37)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+
+                            if task.id != model.taskSearchResults.last?.id {
+                                Divider().overlay(.white.opacity(0.07))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 13)
+        .padding(.bottom, 12)
     }
 
     private var expandedContent: some View {
@@ -808,22 +1081,25 @@ struct NotchView: View {
             }
 
             if model.pendingDropPrompt != nil {
-                Button(action: model.startNewConversationFromDrop) {
-                    VStack(spacing: 2) {
-                        HStack(spacing: 7) {
-                            Image(systemName: "plus.message.fill")
-                            Text(text("在 Codex 新建对话", "New conversation in Codex"))
+                HStack(spacing: 7) {
+                    ForEach(model.pendingDropActions) { action in
+                        Button {
+                            model.startNewConversationFromDrop(action)
+                        } label: {
+                            VStack(spacing: 3) {
+                                Image(systemName: action.icon)
+                                Text(action.title)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                            }
+                            .font(.system(size: 10.5, weight: .bold))
+                            .foregroundStyle(.black)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(.white, in: RoundedRectangle(cornerRadius: 12))
                         }
-                        Text(text("拖入其他内容可替换", "Drop something else to replace it"))
-                            .font(.system(size: 8.5, weight: .semibold))
-                            .foregroundStyle(.black.opacity(0.48))
+                        .buttonStyle(.plain)
                     }
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.black)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 12))
                 }
-                .buttonStyle(.plain)
             } else {
                 HStack(spacing: 7) {
                     Image(systemName: "arrow.down.doc.fill")
@@ -842,16 +1118,298 @@ struct NotchView: View {
     }
 }
 
+private struct LowUsageAnimatedText: View {
+    let value: String
+    let color: Color
+    @State private var highlighted = false
+    @State private var settled = false
+
+    var body: some View {
+        Text(value)
+            .font(.system(size: 11, weight: .black, design: .rounded))
+            .foregroundStyle(highlighted ? color : .white.opacity(0.92))
+            .scaleEffect(highlighted && !settled ? 1.08 : (highlighted ? 1 : 0.96), anchor: .leading)
+            .onAppear {
+                withAnimation(.smooth(duration: 0.55)) {
+                    highlighted = true
+                }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(550))
+                    withAnimation(.easeOut(duration: 0.24)) {
+                        settled = true
+                    }
+                }
+            }
+    }
+}
+
+private struct DailyUsageHeatGrid: View {
+    let points: [DailyUsagePoint]
+    let selectedDate: Date
+    let onSelect: (Date) -> Void
+
+    private var maximum: Int {
+        max(points.map(\.tokens).max() ?? 1, 1)
+    }
+
+    var body: some View {
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: 7),
+            spacing: 5
+        ) {
+            ForEach(points) { point in
+                Button {
+                    onSelect(point.day)
+                } label: {
+                    ZStack {
+                        Circle()
+                            .stroke(.white.opacity(0.09), lineWidth: 3)
+                        Circle()
+                            .trim(from: 0, to: max(0.04, CGFloat(point.tokens) / CGFloat(maximum)))
+                            .stroke(
+                                point.tokens > 0
+                                    ? AnyShapeStyle(.linearGradient(
+                                        colors: [.cyan, .blue, .purple],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ))
+                                    : AnyShapeStyle(.white.opacity(0.05)),
+                                style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                            )
+                            .rotationEffect(.degrees(-90))
+                        Text(dayText(point.day))
+                            .font(.system(size: 7.5, weight: .black, design: .rounded))
+                            .foregroundStyle(.white.opacity(point.tokens > 0 ? 0.82 : 0.28))
+                    }
+                    .frame(width: 24, height: 24)
+                    .overlay {
+                        if Calendar.current.isDate(point.day, inSameDayAs: selectedDate) {
+                            Circle().stroke(.white.opacity(0.82), lineWidth: 1)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func dayText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d"
+        return formatter.string(from: date)
+    }
+}
+
+private struct DailyReportCelebration: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var expanded = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                ForEach(0..<12, id: \.self) { index in
+                    let angle = Double(index) / 12 * Double.pi * 2
+                    let radius: CGFloat = expanded ? 72 + CGFloat(index % 3) * 10 : 8
+                    Image(systemName: index.isMultiple(of: 3) ? "sparkle" : "circle.fill")
+                        .font(.system(size: index.isMultiple(of: 3) ? 7 : 4, weight: .bold))
+                        .foregroundStyle([Color.cyan, .purple, .pink, .orange][index % 4])
+                        .position(x: proxy.size.width / 2, y: 42)
+                        .offset(
+                            x: cos(angle) * radius,
+                            y: sin(angle) * radius * 0.45
+                        )
+                        .opacity(expanded ? 0 : 0.9)
+                        .scaleEffect(expanded ? 0.4 : 1)
+                }
+            }
+        }
+        .onAppear {
+            guard !reduceMotion else {
+                expanded = true
+                return
+            }
+            withAnimation(.easeOut(duration: 0.85)) {
+                expanded = true
+            }
+        }
+    }
+}
+
+private struct DailyUsageEnergyChart: View {
+    let points: [DailyUsagePoint]
+    let average: Int
+    let selectedDate: Date
+
+    var body: some View {
+        GeometryReader { proxy in
+            let chartHeight = max(1, proxy.size.height - 20)
+            let maximum = max(points.map(\.tokens).max() ?? 1, average, 1)
+            let positions = points.enumerated().map { index, point in
+                CGPoint(
+                    x: points.count > 1
+                        ? CGFloat(index) / CGFloat(points.count - 1) * proxy.size.width
+                        : proxy.size.width,
+                    y: chartHeight - CGFloat(point.tokens) / CGFloat(maximum) * (chartHeight - 12) + 6
+                )
+            }
+
+            Canvas { context, size in
+                guard let first = positions.first, let last = positions.last else { return }
+                if average > 0 {
+                    let y = chartHeight - CGFloat(average) / CGFloat(maximum) * (chartHeight - 12) + 6
+                    var baseline = Path()
+                    baseline.move(to: CGPoint(x: 0, y: y))
+                    baseline.addLine(to: CGPoint(x: size.width, y: y))
+                    context.stroke(
+                        baseline,
+                        with: .color(.white.opacity(0.16)),
+                        style: StrokeStyle(lineWidth: 1, dash: [3, 4])
+                    )
+                }
+
+                var area = Path()
+                area.move(to: CGPoint(x: first.x, y: chartHeight))
+                positions.forEach { area.addLine(to: $0) }
+                area.addLine(to: CGPoint(x: last.x, y: chartHeight))
+                area.closeSubpath()
+                context.fill(
+                    area,
+                    with: .linearGradient(
+                        Gradient(colors: [.cyan.opacity(0.34), .purple.opacity(0.08), .clear]),
+                        startPoint: CGPoint(x: size.width, y: 0),
+                        endPoint: CGPoint(x: 0, y: chartHeight)
+                    )
+                )
+
+                var line = Path()
+                line.move(to: first)
+                positions.dropFirst().forEach { line.addLine(to: $0) }
+                context.drawLayer { glow in
+                    glow.addFilter(.blur(radius: 7))
+                    glow.stroke(line, with: .color(.cyan.opacity(0.48)), lineWidth: 6)
+                }
+                context.stroke(
+                    line,
+                    with: .linearGradient(
+                        Gradient(colors: [.pink, .purple, .blue, .cyan]),
+                        startPoint: .zero,
+                        endPoint: CGPoint(x: size.width, y: 0)
+                    ),
+                    style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round)
+                )
+                for (index, position) in positions.enumerated() where points[index].tokens > 0 {
+                    let selected = Calendar.current.isDate(points[index].day, inSameDayAs: selectedDate)
+                    context.fill(
+                        Path(ellipseIn: CGRect(
+                            x: position.x - (selected ? 4 : 2.5),
+                            y: position.y - (selected ? 4 : 2.5),
+                            width: selected ? 8 : 5,
+                            height: selected ? 8 : 5
+                        )),
+                        with: .color(selected ? .cyan : .white.opacity(0.7))
+                    )
+                }
+            }
+            .overlay(alignment: .bottom) {
+                HStack {
+                    ForEach(points) { point in
+                        Text(shortWeekday(point.day))
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .font(.system(size: 7.5, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.34))
+            }
+        }
+    }
+
+    private func shortWeekday(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = AppLanguage.current.usesEnglish
+            ? Locale(identifier: "en_US")
+            : Locale(identifier: "zh_CN")
+        formatter.dateFormat = AppLanguage.current.usesEnglish ? "EEE" : "E"
+        return formatter.string(from: date)
+    }
+}
+
 private struct NotchSettingsContent: View {
+    private enum Section: CaseIterable {
+        case general
+        case features
+        case about
+    }
+
+    @ObservedObject var model: NotchModel
     @AppStorage("coexistenceMode") private var coexistenceMode = CoexistenceMode.automatic.rawValue
     @AppStorage("screenNumber") private var screenNumber = -1
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.system.rawValue
+    @AppStorage("dailyReportEnabled") private var dailyReportEnabled = true
+    @AppStorage("dailyReportHour") private var dailyReportHour = 18
+    @AppStorage("dailyReportMinute") private var dailyReportMinute = 30
+    @State private var selectedSection: Section = .general
 
     private func text(_ chinese: String, _ english: String) -> String {
         (AppLanguage(rawValue: appLanguage) ?? .system).usesEnglish ? english : chinese
     }
 
     var body: some View {
+        VStack(spacing: 8) {
+            sectionPicker
+
+            Group {
+                switch selectedSection {
+                case .general:
+                    generalSettings
+                case .features:
+                    featureSettings
+                case .about:
+                    aboutSettings
+                }
+            }
+            .transition(.opacity)
+        }
+        .font(.system(size: 10.5, weight: .semibold))
+        .foregroundStyle(.white.opacity(0.82))
+        .animation(.easeOut(duration: 0.14), value: selectedSection)
+        .onChange(of: coexistenceMode) { _, _ in notifyChange() }
+        .onChange(of: screenNumber) { _, _ in notifyChange() }
+        .onChange(of: appLanguage) { _, _ in notifyChange() }
+        .onChange(of: dailyReportEnabled) { _, _ in notifyChange() }
+        .onChange(of: dailyReportHour) { _, _ in notifyChange() }
+        .onChange(of: dailyReportMinute) { _, _ in notifyChange() }
+    }
+
+    private var sectionPicker: some View {
+        HStack(spacing: 4) {
+            sectionButton(.general, title: text("通用", "General"), icon: "slider.horizontal.3")
+            sectionButton(.features, title: text("功能", "Features"), icon: "sparkles")
+            sectionButton(.about, title: text("关于", "About"), icon: "info.circle")
+        }
+        .padding(3)
+        .background(.white.opacity(0.06), in: Capsule())
+    }
+
+    private func sectionButton(_ section: Section, title: String, icon: String) -> some View {
+        Button {
+            selectedSection = section
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 9, weight: .bold))
+                Text(title)
+                    .font(.system(size: 9.5, weight: .bold))
+            }
+            .foregroundStyle(selectedSection == section ? .black : .white.opacity(0.58))
+            .frame(maxWidth: .infinity, minHeight: 25)
+            .background(selectedSection == section ? .white : .clear, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var generalSettings: some View {
         VStack(spacing: 8) {
             settingRow(
                 icon: "rectangle.2.swap",
@@ -883,11 +1441,58 @@ private struct NotchSettingsContent: View {
                 cycleLanguage()
             }
         }
-        .font(.system(size: 10.5, weight: .semibold))
-        .foregroundStyle(.white.opacity(0.82))
-        .onChange(of: coexistenceMode) { _, _ in notifyChange() }
-        .onChange(of: screenNumber) { _, _ in notifyChange() }
-        .onChange(of: appLanguage) { _, _ in notifyChange() }
+    }
+
+    private var featureSettings: some View {
+        VStack(spacing: 8) {
+            dailyReportSettingRow
+
+            settingRow(
+                icon: model.availableUpdate != nil
+                    ? "arrow.down.circle.fill"
+                    : (model.hasCheckedForUpdate ? "checkmark.circle" : "arrow.clockwise.circle"),
+                title: text("软件更新", "Software Update"),
+                detail: model.availableUpdate == nil
+                    ? text("每天自动检查一次", "Checked automatically once a day")
+                    : text("点击下载官方 DMG", "Download the official DMG"),
+                value: model.updateStatusText
+            ) {
+                model.performUpdateAction()
+            }
+        }
+    }
+
+    private var aboutSettings: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                externalLinkButton(
+                    icon: "globe",
+                    title: text("官方网站", "Website"),
+                    url: "https://codexnotch.pages.dev/"
+                )
+                externalLinkButton(
+                    icon: "chevron.left.forwardslash.chevron.right",
+                    title: "GitHub",
+                    url: "https://github.com/VibeDough/CodexNotch"
+                )
+            }
+
+            HStack(spacing: 9) {
+                Image(systemName: "person.crop.circle")
+                    .frame(width: 16)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Henry恒宇").fontWeight(.bold)
+                    Text("@VibeDough")
+                        .font(.system(size: 8.5))
+                        .foregroundStyle(.white.opacity(0.45))
+                }
+                Spacer()
+                Text("CodexNotch \(model.appVersion)")
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.58))
+            }
+            .frame(minHeight: 30)
+        }
     }
 
     private func notifyChange() {
@@ -922,6 +1527,93 @@ private struct NotchSettingsContent: View {
 
     private func screenNumberValue(_ screen: NSScreen) -> Int? {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.intValue
+    }
+
+    private var dailyReportSettingRow: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "chart.line.uptrend.xyaxis")
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(text("日报提醒", "Daily report")).fontWeight(.bold)
+                Text(text("任务空闲后提醒 8 秒", "8-second reminder when idle"))
+                    .font(.system(size: 8.5))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 5)
+            Menu {
+                ForEach(reportTimeOptions, id: \.self) { total in
+                    let hour = total / 60
+                    let minute = total % 60
+                    let label = String(format: "%02d:%02d", hour, minute)
+                    Button {
+                        dailyReportHour = hour
+                        dailyReportMinute = minute
+                    } label: {
+                        if hour == dailyReportHour, minute == dailyReportMinute {
+                            Label(label, systemImage: "checkmark")
+                        } else {
+                            Text(label)
+                        }
+                    }
+                }
+            } label: {
+                Text(reportTimeLabel)
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(dailyReportEnabled ? 0.86 : 0.38))
+                    .padding(.horizontal, 8)
+                    .frame(height: 25)
+                    .background(.white.opacity(0.09), in: Capsule())
+            }
+            .menuStyle(.borderlessButton)
+            .disabled(!dailyReportEnabled)
+
+            Button {
+                dailyReportEnabled.toggle()
+            } label: {
+                Image(systemName: dailyReportEnabled ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(dailyReportEnabled ? .green : .white.opacity(0.38))
+                    .frame(width: 24, height: 25)
+            }
+            .buttonStyle(.plain)
+            .help(dailyReportEnabled
+                ? text("关闭自动提醒", "Disable reminder")
+                : text("开启自动提醒", "Enable reminder"))
+        }
+    }
+
+    private var reportTimeLabel: String {
+        String(format: "%02d:%02d", dailyReportHour, dailyReportMinute)
+    }
+
+    private var reportTimeOptions: [Int] {
+        Array(stride(from: 15 * 60, through: 21 * 60, by: 30))
+    }
+
+    private func externalLinkButton(icon: String, title: String, url: String) -> some View {
+        Button {
+            guard let destination = URL(string: url) else { return }
+            NSWorkspace.shared.open(destination)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 10, weight: .bold))
+                Text(title)
+                    .font(.system(size: 9.5, weight: .bold))
+                Spacer(minLength: 2)
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 8.5, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.42))
+            }
+            .foregroundStyle(.white.opacity(0.82))
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: 30)
+            .background(.white.opacity(0.08), in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(title)
     }
 
     private func settingRow(

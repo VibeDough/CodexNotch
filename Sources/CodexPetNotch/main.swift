@@ -54,6 +54,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             Task { @MainActor in self?.refreshPresentation(reposition: true) }
         }
 
+        NotificationCenter.default.addObserver(
+            forName: .notchWantsKeyboardFocus,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                NSApp.activate(ignoringOtherApps: true)
+                self?.panel?.makeKeyAndOrderFront(nil)
+            }
+        }
+
         environmentTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refreshPresentation(reposition: false) }
         }
@@ -210,8 +221,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Resizing the AppKit panel when settings opens can briefly expose the
         // desktop between the physical notch and the SwiftUI surface.
         let taskListCanvasHeight = model.activeTasks.count > 1
-            ? max(174, 80 + CGFloat(model.activeTasks.count * 40))
-            : 174
+            ? max(286, 80 + CGFloat(model.activeTasks.count * 40))
+            : 286
         return NSSize(
             width: max(450, visibleSize.width),
             height: max(taskListCanvasHeight, visibleSize.height)

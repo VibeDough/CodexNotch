@@ -137,6 +137,20 @@ final class CodexTaskMonitor: @unchecked Sendable {
         return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, todayTokensByModel: usageStats.byModel, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
     }
 
+    func recentTasks(limit: Int = 40) -> [CodexTaskItem] {
+        _ = latestDesktopState()
+        var seen: Set<String> = []
+        return newestRollouts(limit: max(64, limit))
+            .compactMap(cachedActivity(for:))
+            .sorted { $0.task.lastActivityAt > $1.task.lastActivityAt }
+            .compactMap { rollout in
+                guard seen.insert(rollout.task.id).inserted else { return nil }
+                return rollout.task
+            }
+            .prefix(limit)
+            .map { $0 }
+    }
+
     func hasDesktopActivity(since date: Date) -> Bool {
         guard let url = desktopLogURL(),
               let modifiedAt = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate else {
