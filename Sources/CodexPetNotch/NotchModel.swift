@@ -347,6 +347,10 @@ final class NotchModel: ObservableObject {
         dailyUsageEvaluation(tokens: selectedDailyReportTokens)
     }
 
+    var todayUsageEvaluation: String {
+        dailyUsageEvaluation(tokens: todayTokens)
+    }
+
     var selectedDailyReportTokens: Int {
         dailyUsagePoints.first {
             Calendar.current.isDate($0.day, inSameDayAs: selectedDailyReportDate)

@@ -460,15 +460,50 @@ struct NotchView: View {
                     }
                 }
                 Spacer(minLength: 10)
-                Button(action: model.openCodex) {
-                    Color.clear
-                        .contentShape(Rectangle())
+                Button(action: model.showDailyReport) {
+                    VStack(spacing: 4) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "flame.fill")
+                                .foregroundStyle(.orange)
+                            Text(model.activeUsageDays == 0
+                                ? text("正在建立使用基线", "Building your baseline")
+                                : "\(text("连续", "Streak")) \(model.usageStreakDays) \(text("天", "days")) · \(model.todayUsageEvaluation)")
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.78)
+                        }
+                        .font(.system(size: 8.5, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.72))
+
+                        HStack(spacing: 6) {
+                            GeometryReader { proxy in
+                                Capsule()
+                                    .fill(.white.opacity(0.1))
+                                    .overlay(alignment: .leading) {
+                                        Capsule()
+                                            .fill(.linearGradient(
+                                                colors: [.orange, .pink, .purple],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            ))
+                                            .frame(
+                                                width: proxy.size.width
+                                                    * CGFloat(model.activeUsageDays) / 14
+                                            )
+                                    }
+                            }
+                            .frame(height: 3)
+                            Text("\(model.activeUsageDays)/14")
+                                .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.38))
+                        }
+                    }
+                    .frame(width: 158, height: 34)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .frame(maxWidth: .infinity, minHeight: 34)
                 .allowsHitTesting(showsUsageDetails)
-                .accessibilityLabel(text("打开 Codex", "Open Codex"))
-                .help(text("打开 Codex", "Open Codex"))
+                .accessibilityLabel(text("查看今日报告", "View today's report"))
+                .help(text("查看今日报告", "View today's report"))
                 Spacer(minLength: 10)
                 Text(model.planText)
                     .font(.system(size: 10, weight: .semibold))
