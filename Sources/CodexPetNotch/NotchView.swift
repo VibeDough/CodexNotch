@@ -325,8 +325,14 @@ struct NotchView: View {
 
     private var completionCountBadge: some View {
         HStack(spacing: 5) {
-            Image(systemName: "checkmark")
-                .font(.system(size: 8, weight: .black))
+            CompletionCheckAnimation(
+                size: 13,
+                lineWidth: 1.8,
+                fill: .clear,
+                stroke: Color(red: 0.06, green: 0.38, blue: 0.17),
+                check: Color(red: 0.06, green: 0.38, blue: 0.17)
+            )
+            .id(model.completedTask?.id ?? "\(model.pendingCompletionCount)")
             Text("\(model.pendingCompletionCount)")
                 .font(.system(size: 12, weight: .black, design: .rounded))
                 .contentTransition(.numericText())
@@ -808,11 +814,14 @@ struct NotchView: View {
                     model.acknowledgeCompletedTask(task)
                 }
             } label: {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(Color(red: 0.1, green: 0.55, blue: 0.28))
-                    .frame(width: 28, height: 28)
-                    .background(Color(red: 0.72, green: 0.94, blue: 0.79), in: Circle())
+                CompletionCheckAnimation(
+                    size: 28,
+                    lineWidth: 2.2,
+                    fill: Color(red: 0.72, green: 0.94, blue: 0.79),
+                    stroke: Color(red: 0.12, green: 0.7, blue: 0.34),
+                    check: Color(red: 0.1, green: 0.55, blue: 0.28)
+                )
+                .id(task.id)
             }
             .buttonStyle(.plain)
             .help(text("查看已完成任务", "View completed task"))
@@ -850,11 +859,14 @@ struct NotchView: View {
                     model.acknowledgeCompletedTask(task)
                 }
             } label: {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 10, weight: .black))
-                    .foregroundStyle(Color(red: 0.1, green: 0.55, blue: 0.28))
-                    .frame(width: 24, height: 24)
-                    .background(Color(red: 0.72, green: 0.94, blue: 0.79), in: Circle())
+                CompletionCheckAnimation(
+                    size: 24,
+                    lineWidth: 2,
+                    fill: Color(red: 0.72, green: 0.94, blue: 0.79),
+                    stroke: Color(red: 0.12, green: 0.7, blue: 0.34),
+                    check: Color(red: 0.1, green: 0.55, blue: 0.28)
+                )
+                .id(task.id)
             }
             .buttonStyle(.plain)
             .help(text("查看已完成任务", "View completed task"))
@@ -1231,6 +1243,54 @@ private struct DailyReportCelebration: View {
             }
             withAnimation(.easeOut(duration: 0.85)) {
                 expanded = true
+            }
+        }
+    }
+}
+
+private struct CompletionCheckAnimation: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let size: CGFloat
+    let lineWidth: CGFloat
+    let fill: Color
+    let stroke: Color
+    let check: Color
+    @State private var ringProgress: CGFloat = 0
+    @State private var checkVisible = false
+
+    var body: some View {
+        ZStack {
+            Circle().fill(fill)
+            Circle()
+                .stroke(stroke.opacity(0.18), lineWidth: lineWidth)
+            Circle()
+                .trim(from: 0, to: ringProgress)
+                .stroke(
+                    stroke,
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+            Image(systemName: "checkmark")
+                .font(.system(size: size * 0.43, weight: .black))
+                .foregroundStyle(check)
+                .scaleEffect(checkVisible ? 1 : 0.35)
+                .opacity(checkVisible ? 1 : 0)
+        }
+        .frame(width: size, height: size)
+        .onAppear {
+            if reduceMotion {
+                ringProgress = 1
+                checkVisible = true
+                return
+            }
+            withAnimation(.easeInOut(duration: 0.34)) {
+                ringProgress = 1
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(220))
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.62)) {
+                    checkVisible = true
+                }
             }
         }
     }
