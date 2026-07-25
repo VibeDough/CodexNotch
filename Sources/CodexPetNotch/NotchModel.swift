@@ -246,7 +246,7 @@ final class NotchModel: ObservableObject {
     }
 
     func toggleTaskStatusPinned() {
-        guard activeTasks.count > 1 else {
+        guard hasExpandableTaskHierarchy else {
             isTaskStatusPinned = false
             return
         }
@@ -527,7 +527,7 @@ final class NotchModel: ObservableObject {
         if isShowingSettings { return .settings }
         if isShowingDailyReport { return .dailyReport }
         if isDailyReportReminderVisible { return .dailyReportReminder }
-        if isTaskStatusPinned, activeTasks.count > 1 { return .taskList(activeTasks.count) }
+        if isTaskStatusPinned, hasExpandableTaskHierarchy { return .taskList(activeTasks.count) }
         if primaryTask != nil {
             return visibleCompletionMessage == nil || isCompletionStackCollapsed ? .task : .taskWithCompletion
         }
@@ -539,7 +539,8 @@ final class NotchModel: ObservableObject {
     }
 
     var presentationSize: CGSize {
-        switch presentationMode {
+        let subtaskRows = activeTasks.reduce(0) { $0 + min($1.subtasks.count, 2) }
+        return switch presentationMode {
         case .idle: CGSize(width: 310, height: 38)
         case .compactIdle: CGSize(width: 270, height: 36)
         case .collapsedCompletion: CGSize(width: 322, height: 38)
@@ -553,7 +554,7 @@ final class NotchModel: ObservableObject {
         case .collapsedTask: CGSize(width: 424, height: 44)
         case .task: CGSize(width: 450, height: 86)
         case .taskWithCompletion: CGSize(width: 450, height: 122)
-        case let .taskList(count): CGSize(width: 450, height: 80 + CGFloat(count * 40))
+        case .taskList: CGSize(width: 450, height: 80 + CGFloat(activeTasks.count * 40 + subtaskRows * 22))
         case .inputRequired: CGSize(width: 450, height: 94)
         case .waiting: CGSize(width: 450, height: 94)
         case .completion: CGSize(width: 450, height: completedTask == nil ? 88 : 86)
@@ -565,6 +566,10 @@ final class NotchModel: ObservableObject {
         return priority.lazy.compactMap { phase in
             self.activeTasks.first { $0.phase == phase }
         }.first
+    }
+
+    var hasExpandableTaskHierarchy: Bool {
+        activeTasks.count > 1 || activeTasks.contains { !$0.subtasks.isEmpty }
     }
 
     func setDropTargeted(_ targeted: Bool) {
@@ -1083,7 +1088,7 @@ final class NotchModel: ObservableObject {
             dailyReportReminderTask?.cancel()
             taskLayoutChanged = true
         }
-        if snapshot.tasks.count < 2, isTaskStatusPinned {
+        if !hasExpandableTaskHierarchy, isTaskStatusPinned {
             isTaskStatusPinned = false
             taskLayoutChanged = true
         }

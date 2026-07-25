@@ -12,7 +12,7 @@ struct NotchView: View {
     }
 
     private var showsTaskDetails: Bool {
-        model.isTaskStatusPinned && model.activeTasks.count > 1
+        model.isTaskStatusPinned && model.hasExpandableTaskHierarchy
     }
 
     private var showsUsageDetails: Bool {
@@ -184,7 +184,7 @@ struct NotchView: View {
                         }
                         .buttonStyle(.plain)
                         .help(text("展开已完成任务", "Show completed tasks"))
-                    } else if model.activeTasks.count > 1 {
+                    } else if model.hasExpandableTaskHierarchy {
                         Button { model.toggleTaskStatusPinned() } label: { taskStatus }
                             .buttonStyle(.plain)
                             .help(model.isTaskStatusPinned
@@ -395,10 +395,7 @@ struct NotchView: View {
                                 .font(.system(size: 10.5, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
-                            Text(task.detail)
-                                .font(.system(size: 9))
-                                .foregroundStyle(.white.opacity(0.5))
-                                .lineLimit(1)
+                            taskRuntimeLine(task)
                         }
 
                         Spacer(minLength: 8)
@@ -410,6 +407,7 @@ struct NotchView: View {
                             Text(taskUsageLine(task))
                                 .font(.system(size: 9))
                                 .foregroundStyle(.white.opacity(0.45))
+                            runtimeBadges(task)
                         }
                     }
                     .frame(height: 40)
@@ -417,12 +415,30 @@ struct NotchView: View {
                 .buttonStyle(.plain)
                 .help(text("返回 Codex 对话", "Return to Codex conversation"))
 
+                ForEach(task.subtasks.prefix(2)) { subtask in
+                    HStack(spacing: 7) {
+                        Image(systemName: "arrow.turn.down.right")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.cyan.opacity(0.68))
+                        Text(subtask.name)
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.58))
+                            .lineLimit(1)
+                        Spacer()
+                        Text(text("子任务", "Subtask"))
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.34))
+                    }
+                    .frame(height: 22)
+                    .padding(.leading, 16)
+                }
+
                 if task.id != model.activeTasks.last?.id {
                     Divider().overlay(.white.opacity(0.08))
                 }
             }
 
-            if model.activeTasks.count > 1 {
+            if model.hasExpandableTaskHierarchy {
                 Button { model.toggleTaskStatusPinned() } label: {
                     HStack(spacing: 5) {
                         Image(systemName: "chevron.up")
@@ -758,7 +774,7 @@ struct NotchView: View {
     private func persistentTaskStatus(_ task: CodexTaskItem) -> some View {
         HStack(spacing: 2) {
             Button {
-                if model.activeTasks.count > 1 {
+                if model.hasExpandableTaskHierarchy {
                     model.toggleTaskStatusPinned()
                 } else {
                     model.openTask(task)
@@ -773,10 +789,7 @@ struct NotchView: View {
                             .font(.system(size: 10.5, weight: .bold))
                             .foregroundStyle(.white)
                             .lineLimit(1)
-                        Text(task.detail)
-                            .font(.system(size: 9))
-                            .foregroundStyle(.white.opacity(0.5))
-                            .lineLimit(1)
+                        taskRuntimeLine(task)
                     }
                     Spacer(minLength: 6)
                     if model.activeTaskCount > 1 {
@@ -791,6 +804,7 @@ struct NotchView: View {
                         .frame(height: 22)
                         .background(.white.opacity(0.1), in: Capsule())
                     }
+                    runtimeBadges(task)
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(modelName(task.model))
                         Text(taskUsageLine(task))
@@ -805,8 +819,8 @@ struct NotchView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(model.activeTaskCount > 1
-                ? text("展开全部任务", "Show all tasks")
+            .help(model.hasExpandableTaskHierarchy
+                ? text("展开 Agent 与任务层级", "Show agent and task hierarchy")
                 : text("返回 Codex 对话", "Return to Codex conversation"))
 
             Button(action: model.toggleTaskDisplayCollapsed) {
@@ -819,6 +833,45 @@ struct NotchView: View {
             .buttonStyle(.plain)
             .padding(.trailing, 8)
             .help(text("收起任务详情", "Collapse task details"))
+        }
+    }
+
+    @ViewBuilder
+    private func taskRuntimeLine(_ task: CodexTaskItem) -> some View {
+        if let tool = task.toolActivity {
+            HStack(spacing: 4) {
+                Image(systemName: tool.systemImage)
+                Text(tool.label)
+            }
+            .font(.system(size: 9, weight: .medium))
+            .foregroundStyle(.cyan.opacity(0.72))
+            .lineLimit(1)
+        } else {
+            Text(task.detail)
+                .font(.system(size: 9))
+                .foregroundStyle(.white.opacity(0.5))
+                .lineLimit(1)
+        }
+    }
+
+    @ViewBuilder
+    private func runtimeBadges(_ task: CodexTaskItem) -> some View {
+        if !task.subtasks.isEmpty || task.queuedMessageCount > 0 {
+            HStack(spacing: 4) {
+                if !task.subtasks.isEmpty {
+                    Label("\(task.subtasks.count)", systemImage: "point.3.connected.trianglepath.dotted")
+                }
+                if task.queuedMessageCount > 0 {
+                    Label("\(task.queuedMessageCount)", systemImage: "text.line.last.and.arrowtriangle.forward")
+                }
+            }
+            .font(.system(size: 8, weight: .bold, design: .rounded))
+            .foregroundStyle(.white.opacity(0.56))
+            .fixedSize()
+            .accessibilityLabel(text(
+                "\(task.subtasks.count) 个子任务，\(task.queuedMessageCount) 个排队任务",
+                "\(task.subtasks.count) subtasks, \(task.queuedMessageCount) queued messages"
+            ))
         }
     }
 

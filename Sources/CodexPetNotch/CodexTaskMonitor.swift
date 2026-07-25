@@ -43,6 +43,110 @@ struct CodexTaskItem: Identifiable, Equatable {
     let phase: CodexActivity.Phase
     let startedAt: Date?
     let lastActivityAt: Date
+    let toolActivity: CodexToolActivity?
+    let subtasks: [CodexSubtask]
+    let queuedMessageCount: Int
+}
+
+struct CodexToolActivity: Equatable {
+    let name: String
+    let label: String
+    let systemImage: String
+}
+
+struct CodexSubtask: Identifiable, Equatable {
+    let id: String
+    let name: String
+}
+
+struct CodexTaskRuntimeTracker {
+    private(set) var tools: [(id: String, activity: CodexToolActivity)] = []
+    private(set) var subtasks: [CodexSubtask] = []
+    private(set) var queuedMessageCount = 0
+    private var taskStarted = false
+    private var expectsInitialMessage = false
+
+    var currentTool: CodexToolActivity? { tools.last?.activity }
+
+    mutating func taskDidStart() {
+        taskStarted = true
+        expectsInitialMessage = true
+        queuedMessageCount = 0
+        tools.removeAll()
+        subtasks.removeAll()
+    }
+
+    mutating func userMessageArrived() {
+        guard taskStarted else { return }
+        if expectsInitialMessage {
+            expectsInitialMessage = false
+        } else {
+            queuedMessageCount += 1
+        }
+    }
+
+    mutating func toolCalled(id: String, name: String, arguments: String?) {
+        if name.lowercased().hasSuffix("spawn_agent"),
+           let subtask = Self.subtask(id: id, arguments: arguments, index: subtasks.count + 1) {
+            if !subtasks.contains(where: { $0.name == subtask.name }) {
+                subtasks.append(subtask)
+            }
+        }
+        guard let activity = Self.activity(name: name) else { return }
+        tools.removeAll { $0.id == id }
+        tools.append((id, activity))
+    }
+
+    mutating func toolFinished(id: String) {
+        tools.removeAll { $0.id == id }
+    }
+
+    mutating func taskDidFinish() {
+        taskStarted = false
+        expectsInitialMessage = false
+        queuedMessageCount = 0
+        tools.removeAll()
+    }
+
+    static func activity(name: String) -> CodexToolActivity? {
+        let normalized = name.lowercased()
+        if ["write_stdin", "wait", "wait_agent", "update_plan"].contains(normalized) { return nil }
+        if normalized.contains("image") {
+            return CodexToolActivity(name: name, label: AppLanguage.text("生成图片", "Generating image"), systemImage: "photo.badge.plus")
+        }
+        if normalized.contains("browser") || normalized.contains("chrome") || normalized == "run" {
+            return CodexToolActivity(name: name, label: AppLanguage.text("浏览网页", "Browsing web"), systemImage: "safari")
+        }
+        if normalized == "js" || normalized.contains("computer") {
+            return CodexToolActivity(name: name, label: AppLanguage.text("检查界面", "Inspecting interface"), systemImage: "macwindow")
+        }
+        if normalized.contains("search") {
+            return CodexToolActivity(name: name, label: AppLanguage.text("查询信息", "Searching"), systemImage: "magnifyingglass")
+        }
+        if normalized.contains("github") || normalized.hasPrefix("gh_") {
+            return CodexToolActivity(name: name, label: AppLanguage.text("同步 GitHub", "Syncing GitHub"), systemImage: "arrow.triangle.branch")
+        }
+        if normalized == "spawn_agent" || normalized.contains("agent") {
+            return CodexToolActivity(name: name, label: AppLanguage.text("协调子 Agent", "Coordinating agents"), systemImage: "point.3.connected.trianglepath.dotted")
+        }
+        if normalized.contains("apply_patch") {
+            return CodexToolActivity(name: name, label: AppLanguage.text("修改代码", "Editing code"), systemImage: "hammer")
+        }
+        if normalized == "exec" || normalized.contains("command") {
+            return CodexToolActivity(name: name, label: AppLanguage.text("运行工具", "Running tool"), systemImage: "terminal")
+        }
+        return CodexToolActivity(name: name, label: AppLanguage.text("使用工具", "Using tool"), systemImage: "wrench.and.screwdriver")
+    }
+
+    private static func subtask(id: String, arguments: String?, index: Int) -> CodexSubtask? {
+        guard let arguments,
+              let data = arguments.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        let name = (object["task_name"] as? String)
+            ?? (object["agent_type"] as? String)
+            ?? AppLanguage.text("子 Agent \(index)", "Sub-agent \(index)")
+        return CodexSubtask(id: id, name: name.replacingOccurrences(of: "_", with: " "))
+    }
 }
 
 private struct MonitoredRollout {
@@ -533,7 +637,10 @@ final class CodexTaskMonitor: @unchecked Sendable {
         defer { try? handle.close() }
 
         let length = (try? handle.seekToEnd()) ?? 0
-        let sampleSize: UInt64 = 2_000_000
+        // Image and computer-use outputs can each add multi-megabyte JSONL
+        // records. Keep enough history to retain the parent spawn/queue events
+        // that immediately precede those outputs.
+        let sampleSize: UInt64 = 8_000_000
         try? handle.seek(toOffset: length > sampleSize ? length - sampleSize : 0)
         let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
         var lastPhase: CodexActivity.Phase = .idle
@@ -551,6 +658,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
         var lastUserMessage: String?
         var sawLifecycleEvent = false
         var userInputTracker = CodexUserInputTracker()
+        var runtimeTracker = CodexTaskRuntimeTracker()
 
         for line in text.split(separator: "\n") {
             guard let data = line.data(using: .utf8),
@@ -584,6 +692,12 @@ final class CodexTaskMonitor: @unchecked Sendable {
                 }
             }
 
+            if let call = Self.toolCall(from: payload) {
+                runtimeTracker.toolCalled(id: call.id, name: call.name, arguments: call.arguments)
+            } else if let outputID = Self.toolOutputID(from: payload) {
+                runtimeTracker.toolFinished(id: outputID)
+            }
+
             switch type {
             case "session_meta":
                 sessionID = payload["id"] as? String ?? sessionID
@@ -605,12 +719,15 @@ final class CodexTaskMonitor: @unchecked Sendable {
             case "user_message":
                 if let message = payload["message"] as? String, !message.isEmpty {
                     lastUserMessage = message
+                    runtimeTracker.userMessageArrived()
                 }
             case "task_started":
                 sawLifecycleEvent = true
+                runtimeTracker.taskDidStart()
                 lastPhase = .running; lastLabel = AppLanguage.text("Codex 正在处理", "Codex is working"); taskStartedAt = lastEventDate
             case "task_complete":
                 sawLifecycleEvent = true
+                runtimeTracker.taskDidFinish()
                 lastPhase = .completed
                 completionDate = lastEventDate
                 lastLabel = lastMessage.map(Self.summary) ?? AppLanguage.text("任务完成", "Task completed")
@@ -679,7 +796,10 @@ final class CodexTaskMonitor: @unchecked Sendable {
             totalTokens: totalTokens,
             phase: lastPhase,
             startedAt: taskStartedAt,
-            lastActivityAt: activity.eventDate
+            lastActivityAt: activity.eventDate,
+            toolActivity: runtimeTracker.currentTool,
+            subtasks: runtimeTracker.subtasks,
+            queuedMessageCount: runtimeTracker.queuedMessageCount
         )
         return MonitoredRollout(activity: activity, task: task)
     }
@@ -707,6 +827,20 @@ final class CodexTaskMonitor: @unchecked Sendable {
         default:
             return nil
         }
+    }
+
+    static func toolCall(from payload: [String: Any]) -> (id: String, name: String, arguments: String?)? {
+        guard let type = payload["type"] as? String,
+              type == "function_call" || type == "custom_tool_call",
+              let id = payload["call_id"] as? String,
+              let name = payload["name"] as? String else { return nil }
+        return (id, name, (payload["arguments"] as? String) ?? (payload["input"] as? String))
+    }
+
+    static func toolOutputID(from payload: [String: Any]) -> String? {
+        guard let type = payload["type"] as? String,
+              type == "function_call_output" || type == "custom_tool_call_output" else { return nil }
+        return payload["call_id"] as? String
     }
 
     private static func sessionID(from file: URL) -> String? {
