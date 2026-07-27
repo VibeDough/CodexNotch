@@ -220,6 +220,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
     private var cachedViewedThread: CodexViewedThread?
     private var threadMetadata: [String: ThreadMetadata] = [:]
     private var realtimeThreadState: [String: (isActive: Bool, eventDate: Date?)] = [:]
+    private var desktopTurnState: [String: (isActive: Bool, eventDate: Date?)] = [:]
     private var cachedRolloutURLs: [URL] = []
     private var rolloutDiscoveryDate = Date.distantPast
 
@@ -288,6 +289,10 @@ final class CodexTaskMonitor: @unchecked Sendable {
             ingestThreadMetadata(from: value)
             if let event = Self.realtimeThreadEvent(from: value) {
                 realtimeThreadState[event.id] = (event.isActive, event.eventDate)
+                activityCache = activityCache.filter { $0.value.rollout?.task.id != event.id }
+            }
+            if let event = Self.desktopTurnEvent(from: value) {
+                desktopTurnState[event.id] = (event.isActive, event.eventDate)
                 activityCache = activityCache.filter { $0.value.rollout?.task.id != event.id }
             }
         }
@@ -790,6 +795,21 @@ final class CodexTaskMonitor: @unchecked Sendable {
                 return nil
             }
         }
+        if let desktopState = desktopTurnState[sessionID],
+           desktopState.isActive,
+           desktopState.eventDate.map({ $0 >= (completionDate ?? .distantPast) }) ?? true,
+           lastPhase != .inputRequired,
+           lastPhase != .waiting {
+            sawLifecycleEvent = true
+            lastPhase = lastPhase == .review ? .review : .running
+            lastLabel = lastPhase == .review
+                ? AppLanguage.text("Codex 正在分析", "Codex is analyzing")
+                : AppLanguage.text("Codex 正在处理", "Codex is working")
+            if let eventDate = desktopState.eventDate {
+                lastEventDate = max(lastEventDate, eventDate)
+                taskStartedAt = taskStartedAt ?? eventDate
+            }
+        }
         if lastPhase == .completed {
             lastLabel = lastMessage.map(Self.summary) ?? AppLanguage.text("任务完成", "Task completed")
         } else if !sawLifecycleEvent,
@@ -884,6 +904,29 @@ final class CodexTaskMonitor: @unchecked Sendable {
         if line.contains("method=thread/realtime/start") {
             isActive = true
         } else if line.contains("method=thread/realtime/stop") {
+            isActive = false
+        } else {
+            return nil
+        }
+        guard let range = line.range(
+            of: #"conversationId=([0-9a-f-]+)"#,
+            options: .regularExpression
+        ) else { return nil }
+        let field = String(line[range])
+        guard let separator = field.firstIndex(of: "=") else { return nil }
+        let timestamp = line.split(separator: " ", maxSplits: 1).first.map(String.init)
+        return (
+            String(field[field.index(after: separator)...]),
+            isActive,
+            timestamp.flatMap(parseDate)
+        )
+    }
+
+    static func desktopTurnEvent(from line: String) -> (id: String, isActive: Bool, eventDate: Date?)? {
+        let isActive: Bool
+        if line.contains("method=turn/start") {
+            isActive = true
+        } else if line.contains("[desktop-notifications] show turn-complete") {
             isActive = false
         } else {
             return nil

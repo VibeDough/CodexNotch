@@ -463,20 +463,27 @@ struct NotchView: View {
     private var tokenDetails: some View {
         VStack(spacing: 9) {
             HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(text("今日消耗", "Today"))
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.48))
-                    Text(model.todayTokenText)
-                        .font(.system(size: 16, weight: .black, design: .rounded))
-                        .foregroundStyle(.white)
-                    if let breakdown = model.todayModelUsageText {
-                        Text(breakdown)
-                            .font(.system(size: 8.5, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.42))
-                            .lineLimit(1)
+                Button(action: model.openCodex) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(text("今日消耗", "Today"))
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.48))
+                        Text(model.todayTokenText)
+                            .font(.system(size: 16, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
+                        if let breakdown = model.todayModelUsageText {
+                            Text(breakdown)
+                                .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.42))
+                                .lineLimit(1)
+                        }
                     }
+                    .frame(minWidth: 112, minHeight: 48, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .help(text("打开 Codex", "Open Codex"))
+                .accessibilityLabel(text("打开 Codex", "Open Codex"))
                 Spacer(minLength: 10)
                 Button(action: model.showDailyReport) {
                     VStack(spacing: 4) {
