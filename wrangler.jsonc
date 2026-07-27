@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "codexnotch",
+  "pages_build_output_dir": "./docs",
+  "compatibility_date": "2026-07-27",
+  "d1_databases": [
+    {
+      "binding": "PAGEVIEWS",
+      "database_name": "codexnotch-pageviews",
+      "database_id": "60245605-2373-4fd2-b6c0-8d222d665f5f"
+    }
+  ]
+}

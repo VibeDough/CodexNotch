@@ -9,6 +9,19 @@ const observer = new IntersectionObserver(entries => {
 
 document.querySelectorAll('.reveal').forEach(element => observer.observe(element));
 
+const viewCount = document.querySelector('[data-view-count]');
+if (viewCount) {
+  fetch('/api/views', { cache: 'no-store' })
+    .then(response => response.ok ? response.json() : Promise.reject())
+    .then(({ views }) => {
+      if (!Number.isFinite(views)) return;
+      const label = viewCount.dataset.viewLabel;
+      viewCount.textContent = `· ◉ ${new Intl.NumberFormat().format(views)} ${label}`;
+      viewCount.hidden = false;
+    })
+    .catch(() => {});
+}
+
 document.querySelector('[data-copy]')?.addEventListener('click', async event => {
   const button = event.currentTarget;
   try {
