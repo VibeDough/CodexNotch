@@ -21,6 +21,20 @@ struct CodexStatusSnapshot {
     let petStackUpdatedAt: Date?
 }
 
+struct CodexMonitorDiagnostics: Equatable {
+    enum Source: String {
+        case sessionLog
+        case desktopLifecycle
+        case voiceLifecycle
+        case unavailable
+    }
+
+    let source: Source
+    let lastEventAt: Date?
+    let canReadSessions: Bool
+    let canReadDesktopLog: Bool
+}
+
 struct CodexViewedThread {
     let id: String
     let viewedAt: Date
@@ -32,8 +46,21 @@ struct CodexUsageLimit: Equatable {
     let planType: String?
 }
 
+enum AgentProviderKind: String, Equatable {
+    case codex
+    case workBuddy
+
+    var displayName: String {
+        switch self {
+        case .codex: "Codex"
+        case .workBuddy: "WorkBuddy"
+        }
+    }
+}
+
 struct CodexTaskItem: Identifiable, Equatable {
     let id: String
+    let provider: AgentProviderKind
     let title: String
     let detail: String
     let project: String
@@ -221,6 +248,8 @@ final class CodexTaskMonitor: @unchecked Sendable {
     private var threadMetadata: [String: ThreadMetadata] = [:]
     private var realtimeThreadState: [String: (isActive: Bool, eventDate: Date?)] = [:]
     private var desktopTurnState: [String: (isActive: Bool, eventDate: Date?)] = [:]
+    private var lastMonitorSource = CodexMonitorDiagnostics.Source.unavailable
+    private var lastMonitorEventAt: Date?
     private var cachedRolloutURLs: [URL] = []
     private var rolloutDiscoveryDate = Date.distantPast
 
@@ -232,6 +261,9 @@ final class CodexTaskMonitor: @unchecked Sendable {
         let usageStats = todayUsageStats(recentURLs: recentRolloutURLs)
         let activePhases: [CodexActivity.Phase] = [.running, .review, .inputRequired, .waiting]
         let tasks = rollouts.filter { activePhases.contains($0.activity.phase) }.map(\.task)
+        if let latestEvent = rollouts.map(\.activity.eventDate).filter({ $0 != .distantPast }).max() {
+            recordMonitorEvent(source: .sessionLog, at: latestEvent)
+        }
         if let completion = rollouts.first(where: {
             $0.activity.phase == .completed && Date().timeIntervalSince($0.activity.eventDate) < 8
         }) {
@@ -242,6 +274,17 @@ final class CodexTaskMonitor: @unchecked Sendable {
         }
         let idle = CodexActivity(phase: .idle, label: AppLanguage.text("Codex 空闲", "Codex idle"), eventDate: .distantPast, startedAt: nil)
         return CodexStatusSnapshot(primary: idle, activeCount: 0, tasks: [], todayTokens: usageStats.tokens, todayTokensByModel: usageStats.byModel, usageLimit: usageStats.limit, completedTask: nil, viewedThread: desktopState.viewedThread, petStackItemCount: desktopState.itemCount, petStackUpdatedAt: desktopState.updatedAt)
+    }
+
+    func diagnostics() -> CodexMonitorDiagnostics {
+        CodexMonitorDiagnostics(
+            source: lastMonitorSource,
+            lastEventAt: lastMonitorEventAt,
+            canReadSessions: FileManager.default.isReadableFile(atPath: sessionsURL.path),
+            canReadDesktopLog: desktopLogURL().map {
+                FileManager.default.isReadableFile(atPath: $0.path)
+            } ?? false
+        )
     }
 
     func recentTasks(limit: Int = 40) -> [CodexTaskItem] {
@@ -289,10 +332,12 @@ final class CodexTaskMonitor: @unchecked Sendable {
             ingestThreadMetadata(from: value)
             if let event = Self.realtimeThreadEvent(from: value) {
                 realtimeThreadState[event.id] = (event.isActive, event.eventDate)
+                recordMonitorEvent(source: .voiceLifecycle, at: event.eventDate)
                 activityCache = activityCache.filter { $0.value.rollout?.task.id != event.id }
             }
             if let event = Self.desktopTurnEvent(from: value) {
                 desktopTurnState[event.id] = (event.isActive, event.eventDate)
+                recordMonitorEvent(source: .desktopLifecycle, at: event.eventDate)
                 activityCache = activityCache.filter { $0.value.rollout?.task.id != event.id }
             }
         }
@@ -328,6 +373,13 @@ final class CodexTaskMonitor: @unchecked Sendable {
             if foundPetStack, foundViewedThread { break }
         }
         return (cachedViewedThread, cachedPetStackItemCount, cachedPetStackUpdatedAt)
+    }
+
+    private func recordMonitorEvent(source: CodexMonitorDiagnostics.Source, at date: Date?) {
+        guard let date else { return }
+        guard lastMonitorEventAt.map({ date > $0 }) ?? true else { return }
+        lastMonitorSource = source
+        lastMonitorEventAt = date
     }
 
     private func ingestThreadMetadata(from line: String) {
@@ -836,6 +888,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
         }
         let task = CodexTaskItem(
             id: sessionID,
+            provider: .codex,
             title: (isRealtimeActive ? "Codex Voice" : nil)
                 ?? threadMetadata[sessionID].map { Self.shortText($0.title, limit: 24) }
                 ?? Self.taskTitle(lastUserMessage)
@@ -924,9 +977,11 @@ final class CodexTaskMonitor: @unchecked Sendable {
 
     static func desktopTurnEvent(from line: String) -> (id: String, isActive: Bool, eventDate: Date?)? {
         let isActive: Bool
-        if line.contains("method=turn/start") {
+        if line.contains("method=turn/start")
+            || line.contains("Received turn/started for unknown conversation") {
             isActive = true
-        } else if line.contains("[desktop-notifications] show turn-complete") {
+        } else if line.contains("[desktop-notifications] show turn-complete")
+            || line.contains("Received turn/completed for unknown conversation") {
             isActive = false
         } else {
             return nil

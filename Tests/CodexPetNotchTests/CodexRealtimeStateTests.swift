@@ -27,4 +27,15 @@ struct CodexRealtimeStateTests {
         #expect(CodexTaskMonitor.desktopTurnEvent(from: complete)?.id == id)
         #expect(CodexTaskMonitor.desktopTurnEvent(from: complete)?.isActive == false)
     }
+
+    @Test func parsesAppServerLifecycleForwardedByDesktop() {
+        let id = "019fa29b-204f-7841-97c5-dae64639fcfe"
+        let start = "2026-07-27T08:05:09.862Z error [electron-message-handler] Received turn/started for unknown conversation conversationId=\(id)"
+        let complete = "2026-07-27T08:05:16.031Z error [electron-message-handler] Received turn/completed for unknown conversation conversationId=\(id)"
+
+        #expect(CodexTaskMonitor.desktopTurnEvent(from: start)?.id == id)
+        #expect(CodexTaskMonitor.desktopTurnEvent(from: start)?.isActive == true)
+        #expect(CodexTaskMonitor.desktopTurnEvent(from: complete)?.id == id)
+        #expect(CodexTaskMonitor.desktopTurnEvent(from: complete)?.isActive == false)
+    }
 }

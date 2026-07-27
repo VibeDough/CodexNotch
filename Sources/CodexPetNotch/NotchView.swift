@@ -3,6 +3,30 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct NotchView: View {
+    private static let codexIcon: NSImage = {
+        guard let appURL = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: "com.openai.codex"
+        ) else {
+            return NSImage(
+                systemSymbolName: "terminal",
+                accessibilityDescription: "Codex"
+            ) ?? NSImage()
+        }
+        return NSWorkspace.shared.icon(forFile: appURL.path)
+    }()
+
+    private static let workBuddyIcon: NSImage = {
+        guard let appURL = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: "com.workbuddy.workbuddy"
+        ) else {
+            return NSImage(
+                systemSymbolName: "sparkles",
+                accessibilityDescription: "WorkBuddy"
+            ) ?? NSImage()
+        }
+        return NSWorkspace.shared.icon(forFile: appURL.path)
+    }()
+
     @ObservedObject var model: NotchModel
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.system.rawValue
     @FocusState private var taskSearchFocused: Bool
@@ -388,9 +412,7 @@ struct NotchView: View {
             ForEach(model.activeTasks) { task in
                 Button { model.openTask(task) } label: {
                     HStack(spacing: 9) {
-                        Circle()
-                            .fill(statusColor(task))
-                            .frame(width: 6, height: 6)
+                        providerStatusMark(task, size: 17)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(task.title)
@@ -415,7 +437,9 @@ struct NotchView: View {
                     .frame(height: 40)
                 }
                 .buttonStyle(.plain)
-                .help(text("返回 Codex 对话", "Return to Codex conversation"))
+                .help(task.provider == .workBuddy
+                    ? text("打开 WorkBuddy", "Open WorkBuddy")
+                    : text("返回 Codex 对话", "Return to Codex conversation"))
 
                 ForEach(task.subtasks.prefix(2)) { subtask in
                     HStack(spacing: 7) {
@@ -751,6 +775,36 @@ struct NotchView: View {
         }
     }
 
+    @ViewBuilder
+    private func providerStatusMark(_ task: CodexTaskItem, size: CGFloat) -> some View {
+        let icon = task.provider == .workBuddy ? Self.workBuddyIcon : Self.codexIcon
+        let backgroundColor: Color = task.provider == .workBuddy ? .purple : .cyan
+
+        Image(nsImage: icon)
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .background {
+                RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
+                    .fill(backgroundColor.opacity(0.28))
+            }
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+                    .stroke(backgroundColor.opacity(0.72), lineWidth: 0.8)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                Circle()
+                    .fill(statusColor(task))
+                    .frame(width: max(4, size * 0.34), height: max(4, size * 0.34))
+                    .overlay {
+                        Circle().stroke(.black, lineWidth: 1)
+                    }
+                    .offset(x: 1, y: 1)
+            }
+    }
+
     private func isTaskStale(_ task: CodexTaskItem) -> Bool {
         guard task.phase == .running || task.phase == .review else { return false }
         return model.clockTick.timeIntervalSince(task.lastActivityAt) >= 10 * 60
@@ -796,9 +850,7 @@ struct NotchView: View {
                             .symbolEffect(.variableColor.iterative, options: .repeating)
                             .frame(width: 22, height: 20)
                     } else {
-                        Circle()
-                            .fill(statusColor(task))
-                            .frame(width: 7, height: 7)
+                        providerStatusMark(task, size: 17)
                     }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(task.title)
@@ -837,7 +889,9 @@ struct NotchView: View {
             .buttonStyle(.plain)
             .help(model.hasExpandableTaskHierarchy
                 ? text("展开 Agent 与任务层级", "Show agent and task hierarchy")
-                : text("返回 Codex 对话", "Return to Codex conversation"))
+                : task.provider == .workBuddy
+                    ? text("打开 WorkBuddy", "Open WorkBuddy")
+                    : text("返回 Codex 对话", "Return to Codex conversation"))
 
             Button(action: model.toggleTaskDisplayCollapsed) {
                 Image(systemName: "chevron.up")
@@ -898,6 +952,7 @@ struct NotchView: View {
 
     private func completedTaskStatus(message: String, task: CodexTaskItem) -> some View {
         HStack(spacing: 9) {
+            providerStatusMark(task, size: 17)
             VStack(alignment: .leading, spacing: 2) {
                 Text(task.title)
                     .font(.system(size: 10.5, weight: .bold))
@@ -941,9 +996,7 @@ struct NotchView: View {
 
     private func compactCompletedTaskStatus(_ task: CodexTaskItem) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: "square.stack.3d.down.right.fill")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.white.opacity(0.5))
+            providerStatusMark(task, size: 17)
             Text(task.title)
                 .font(.system(size: 9.5, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.76))
@@ -992,6 +1045,7 @@ struct NotchView: View {
 
     private func confirmationCard(_ task: CodexTaskItem) -> some View {
         HStack(spacing: 10) {
+            providerStatusMark(task, size: 17)
             VStack(alignment: .leading, spacing: 3) {
                 Text(task.title)
                     .font(.system(size: 11, weight: .bold))
@@ -1040,9 +1094,7 @@ struct NotchView: View {
         HStack(spacing: 2) {
             Button { model.openTask(task) } label: {
                 HStack(spacing: 10) {
-                    Circle()
-                        .fill(.orange)
-                        .frame(width: 7, height: 7)
+                    providerStatusMark(task, size: 17)
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(task.title)
@@ -1607,6 +1659,18 @@ private struct NotchSettingsContent: View {
 
     private var aboutSettings: some View {
         VStack(spacing: 8) {
+            settingRow(
+                icon: model.monitorDiagnostics.canReadSessions
+                    && model.monitorDiagnostics.canReadDesktopLog
+                    ? "checkmark.circle.fill"
+                    : "exclamationmark.triangle.fill",
+                title: text("监测状态", "Monitoring"),
+                detail: model.monitorSourceText,
+                value: text("复制诊断", "Copy")
+            ) {
+                model.copyMonitorDiagnostics()
+            }
+
             HStack(spacing: 8) {
                 externalLinkButton(
                     icon: "globe",

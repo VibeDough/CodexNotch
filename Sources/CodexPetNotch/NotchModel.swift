@@ -113,6 +113,12 @@ final class NotchModel: ObservableObject {
     @Published var availableUpdate: AppUpdateInfo?
     @Published var isCheckingForUpdate = false
     @Published var hasCheckedForUpdate = false
+    @Published var monitorDiagnostics = CodexMonitorDiagnostics(
+        source: .unavailable,
+        lastEventAt: nil,
+        canReadSessions: false,
+        canReadDesktopLog: false
+    )
 
     private var activityTimer: Timer?
     private var clockTimer: Timer?
@@ -134,6 +140,7 @@ final class NotchModel: ObservableObject {
     private let networkMonitor = NWPathMonitor()
     private var networkAvailable = true
     private let taskMonitor = CodexTaskMonitor()
+    private let workBuddyTaskMonitor = WorkBuddyTaskMonitor()
     private let dailyUsageHistory = DailyUsageHistory()
     private let codexStartedAt = NSRunningApplication
         .runningApplications(withBundleIdentifier: "com.openai.codex")
@@ -194,6 +201,7 @@ final class NotchModel: ObservableObject {
             ?? "00000000-0000-0000-0000-000000000001"
         let primaryTask = CodexTaskItem(
             id: demoThreadID,
+            provider: .codex,
             title: AppLanguage.text("整理产品发布页", "Polish the product launch page"),
             detail: AppLanguage.text("正在检查界面与构建结果", "Checking the interface and build"),
             project: "CodexNotch",
@@ -214,6 +222,7 @@ final class NotchModel: ObservableObject {
         )
         let secondaryTask = CodexTaskItem(
             id: "00000000-0000-0000-0000-000000000002",
+            provider: .codex,
             title: AppLanguage.text("检查构建结果", "Check the release build"),
             detail: AppLanguage.text("正在运行测试与签名检查", "Running tests and signing checks"),
             project: "CodexNotch",
@@ -234,6 +243,7 @@ final class NotchModel: ObservableObject {
         )
         let completed = CodexTaskItem(
             id: demoThreadID,
+            provider: .codex,
             title: AppLanguage.text("生成产品说明", "Generate product notes"),
             detail: AppLanguage.text("文档与构建检查已完成", "Docs and build checks are complete"),
             project: "CodexNotch",
@@ -809,6 +819,14 @@ final class NotchModel: ObservableObject {
     }
 
     func openTask(_ task: CodexTaskItem) {
+        if task.provider == .workBuddy {
+            let workspace = NSWorkspace.shared
+            guard let url = workspace.urlForApplication(withBundleIdentifier: "com.workbuddy.workbuddy") else { return }
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            workspace.openApplication(at: url, configuration: configuration) { _, _ in }
+            return
+        }
         if let url = URL(string: "codex://threads/\(task.id)"), NSWorkspace.shared.open(url) {
             return
         }
@@ -1277,17 +1295,23 @@ final class NotchModel: ObservableObject {
     private func refreshActivity() {
         refreshConnectionState()
         let snapshot = taskMonitor.latestSnapshot()
-        let activity = snapshot.primary
+        let workBuddySnapshot = workBuddyTaskMonitor.latestSnapshot()
+        let diagnostics = taskMonitor.diagnostics()
+        if monitorDiagnostics != diagnostics {
+            monitorDiagnostics = diagnostics
+        }
+        let mergedTasks = snapshot.tasks + workBuddySnapshot.tasks
+        let activity = mergedPrimaryActivity(tasks: mergedTasks) ?? snapshot.primary
         var taskLayoutChanged = false
-        if activeTaskCount != snapshot.activeCount {
-            activeTaskCount = snapshot.activeCount
+        if activeTaskCount != mergedTasks.count {
+            activeTaskCount = mergedTasks.count
             taskLayoutChanged = true
         }
-        if activeTasks != snapshot.tasks {
-            activeTasks = snapshot.tasks
+        if activeTasks != mergedTasks {
+            activeTasks = mergedTasks
             taskLayoutChanged = true
         }
-        if !snapshot.tasks.isEmpty,
+        if !mergedTasks.isEmpty,
            isShowingDailyReport || isDailyReportReminderVisible {
             isShowingDailyReport = false
             isDailyReportReminderVisible = false
@@ -1311,8 +1335,19 @@ final class NotchModel: ObservableObject {
             Self.saveCachedUsageLimit(latestUsageLimit)
             evaluateLowUsageReminder()
         }
-        if let completedTask = snapshot.completedTask, activity.phase == .completed {
-            enqueueCompletion(completedTask, message: activity.label, eventDate: activity.eventDate)
+        if let completedTask = snapshot.completedTask, snapshot.primary.phase == .completed {
+            enqueueCompletion(
+                completedTask,
+                message: snapshot.primary.label,
+                eventDate: snapshot.primary.eventDate
+            )
+        }
+        if let completedTask = workBuddySnapshot.completedTask {
+            enqueueCompletion(
+                completedTask,
+                message: completedTask.detail,
+                eventDate: completedTask.lastActivityAt
+            )
         }
         if let petStackItemCount = snapshot.petStackItemCount,
            let petStackUpdatedAt = snapshot.petStackUpdatedAt {
@@ -1337,6 +1372,19 @@ final class NotchModel: ObservableObject {
             state = .jumping
         case .failed: state = .failed
         }
+    }
+
+    private func mergedPrimaryActivity(tasks: [CodexTaskItem]) -> CodexActivity? {
+        let priority: [CodexActivity.Phase] = [.inputRequired, .waiting, .failed, .review, .running]
+        guard let task = priority.lazy.compactMap({ phase in
+            tasks.first { $0.phase == phase }
+        }).first else { return nil }
+        return CodexActivity(
+            phase: task.phase,
+            label: task.detail,
+            eventDate: task.lastActivityAt,
+            startedAt: task.startedAt
+        )
     }
 
     private static func loadCachedUsageLimit() -> CodexUsageLimit? {
@@ -1377,6 +1425,47 @@ final class NotchModel: ObservableObject {
             return AppLanguage.text("已是最新 \(appVersion)", "Up to date \(appVersion)")
         }
         return AppLanguage.text("检查更新", "Check")
+    }
+
+    var monitorStatusText: String {
+        monitorDiagnostics.canReadSessions && monitorDiagnostics.canReadDesktopLog
+            ? AppLanguage.text("正常", "Healthy")
+            : AppLanguage.text("受限", "Limited")
+    }
+
+    var monitorSourceText: String {
+        let source = switch monitorDiagnostics.source {
+        case .sessionLog: AppLanguage.text("会话日志", "Session log")
+        case .desktopLifecycle: AppLanguage.text("实时事件", "Live events")
+        case .voiceLifecycle: AppLanguage.text("语音事件", "Voice events")
+        case .unavailable: AppLanguage.text("等待事件", "Waiting for events")
+        }
+        guard let date = monitorDiagnostics.lastEventAt else { return source }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = AppLanguage.current.usesEnglish
+            ? Locale(identifier: "en_US")
+            : Locale(identifier: "zh_CN")
+        formatter.unitsStyle = .short
+        return "\(source) · \(formatter.localizedString(for: date, relativeTo: Date()))"
+    }
+
+    func copyMonitorDiagnostics() {
+        let lines = [
+            "CodexNotch \(appVersion)",
+            "Status: \(monitorStatusText)",
+            "Source: \(monitorSourceText)",
+            "Sessions readable: \(monitorDiagnostics.canReadSessions)",
+            "Desktop log readable: \(monitorDiagnostics.canReadDesktopLog)",
+            "Providers: \(activeProviderNames)",
+            "Active tasks: \(activeTaskCount)"
+        ]
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
+    }
+
+    private var activeProviderNames: String {
+        let names = Set(activeTasks.map(\.provider.displayName)).sorted()
+        return names.isEmpty ? AgentProviderKind.codex.displayName : names.joined(separator: ", ")
     }
 
     func performUpdateAction() {
