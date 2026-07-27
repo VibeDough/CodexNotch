@@ -46,6 +46,7 @@ struct CodexTaskItem: Identifiable, Equatable {
     let toolActivity: CodexToolActivity?
     let subtasks: [CodexSubtask]
     let queuedMessageCount: Int
+    let isRealtimeActive: Bool
 }
 
 struct CodexToolActivity: Equatable {
@@ -218,6 +219,7 @@ final class CodexTaskMonitor: @unchecked Sendable {
     private var cachedPetStackUpdatedAt: Date?
     private var cachedViewedThread: CodexViewedThread?
     private var threadMetadata: [String: ThreadMetadata] = [:]
+    private var realtimeThreadState: [String: (isActive: Bool, eventDate: Date?)] = [:]
     private var cachedRolloutURLs: [URL] = []
     private var rolloutDiscoveryDate = Date.distantPast
 
@@ -282,7 +284,12 @@ final class CodexTaskMonitor: @unchecked Sendable {
         let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
         desktopLogOffset = length
         for line in text.split(separator: "\n") {
-            ingestThreadMetadata(from: String(line))
+            let value = String(line)
+            ingestThreadMetadata(from: value)
+            if let event = Self.realtimeThreadEvent(from: value) {
+                realtimeThreadState[event.id] = (event.isActive, event.eventDate)
+                activityCache = activityCache.filter { $0.value.rollout?.task.id != event.id }
+            }
         }
         let petStackPattern = #"Native pet composition preparation sent .*activityStackItemCount=([0-9]+).*id=mascot-badge|id=mascot-badge.*activityStackItemCount=([0-9]+)"#
         let viewedPattern = #"thread_stream_view_activity_changed .*?(?:conversationId=([0-9a-f-]+).*?active=true|active=true.*?conversationId=([0-9a-f-]+)).*?rendererWindowFocused=true"#
@@ -657,6 +664,8 @@ final class CodexTaskMonitor: @unchecked Sendable {
         var totalTokens: Int?
         var lastUserMessage: String?
         var sawLifecycleEvent = false
+        var isRealtimeSession = false
+        var isRealtimeActive = false
         var userInputTracker = CodexUserInputTracker()
         var runtimeTracker = CodexTaskRuntimeTracker()
 
@@ -701,6 +710,14 @@ final class CodexTaskMonitor: @unchecked Sendable {
             switch type {
             case "session_meta":
                 sessionID = payload["id"] as? String ?? sessionID
+                if payload["thread_source"] as? String == "realtime_voice" {
+                    isRealtimeSession = true
+                    isRealtimeActive = true
+                    sawLifecycleEvent = true
+                    lastPhase = .running
+                    lastLabel = AppLanguage.text("语音交互中", "Voice session active")
+                    taskStartedAt = taskStartedAt ?? lastEventDate
+                }
                 if let cwd = payload["cwd"] as? String {
                     let directoryName = URL(fileURLWithPath: cwd).lastPathComponent
                     project = directoryName == "49labs" ? "CodexNotch" : directoryName
@@ -710,6 +727,9 @@ final class CodexTaskMonitor: @unchecked Sendable {
                 effort = (payload["effort"] as? String)
                     ?? (payload["reasoning_effort"] as? String)
                     ?? effort
+                if let active = payload["realtime_active"] as? Bool {
+                    isRealtimeActive = active
+                }
             case "token_count":
                 if let info = payload["info"] as? [String: Any],
                    let usage = info["total_token_usage"] as? [String: Any],
@@ -757,6 +777,19 @@ final class CodexTaskMonitor: @unchecked Sendable {
                 break
             }
         }
+        if isRealtimeSession, let desktopState = realtimeThreadState[sessionID] {
+            isRealtimeActive = desktopState.isActive
+            if desktopState.isActive {
+                lastPhase = .running
+                lastLabel = AppLanguage.text("语音交互中", "Voice session active")
+                if let eventDate = desktopState.eventDate {
+                    lastEventDate = eventDate
+                    taskStartedAt = eventDate
+                }
+            } else {
+                return nil
+            }
+        }
         if lastPhase == .completed {
             lastLabel = lastMessage.map(Self.summary) ?? AppLanguage.text("任务完成", "Task completed")
         } else if !sawLifecycleEvent,
@@ -783,10 +816,12 @@ final class CodexTaskMonitor: @unchecked Sendable {
         }
         let task = CodexTaskItem(
             id: sessionID,
-            title: threadMetadata[sessionID].map { Self.shortText($0.title, limit: 24) }
+            title: (isRealtimeActive ? "Codex Voice" : nil)
+                ?? threadMetadata[sessionID].map { Self.shortText($0.title, limit: 24) }
                 ?? Self.taskTitle(lastUserMessage)
                 ?? project,
-            detail: userInputTracker.firstQuestion.map(Self.summary)
+            detail: (isRealtimeActive ? AppLanguage.text("正在聆听", "Listening") : nil)
+                ?? userInputTracker.firstQuestion.map(Self.summary)
                 ?? lastMessage.map(Self.summary)
                 ?? threadMetadata[sessionID].map { Self.shortText($0.description, limit: 38) }
                 ?? project,
@@ -799,7 +834,8 @@ final class CodexTaskMonitor: @unchecked Sendable {
             lastActivityAt: activity.eventDate,
             toolActivity: runtimeTracker.currentTool,
             subtasks: runtimeTracker.subtasks,
-            queuedMessageCount: runtimeTracker.queuedMessageCount
+            queuedMessageCount: runtimeTracker.queuedMessageCount,
+            isRealtimeActive: isRealtimeActive
         )
         return MonitoredRollout(activity: activity, task: task)
     }
@@ -841,6 +877,29 @@ final class CodexTaskMonitor: @unchecked Sendable {
         guard let type = payload["type"] as? String,
               type == "function_call_output" || type == "custom_tool_call_output" else { return nil }
         return payload["call_id"] as? String
+    }
+
+    static func realtimeThreadEvent(from line: String) -> (id: String, isActive: Bool, eventDate: Date?)? {
+        let isActive: Bool
+        if line.contains("method=thread/realtime/start") {
+            isActive = true
+        } else if line.contains("method=thread/realtime/stop") {
+            isActive = false
+        } else {
+            return nil
+        }
+        guard let range = line.range(
+            of: #"conversationId=([0-9a-f-]+)"#,
+            options: .regularExpression
+        ) else { return nil }
+        let field = String(line[range])
+        guard let separator = field.firstIndex(of: "=") else { return nil }
+        let timestamp = line.split(separator: " ", maxSplits: 1).first.map(String.init)
+        return (
+            String(field[field.index(after: separator)...]),
+            isActive,
+            timestamp.flatMap(parseDate)
+        )
     }
 
     private static func sessionID(from file: URL) -> String? {

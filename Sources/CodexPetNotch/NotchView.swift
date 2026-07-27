@@ -348,6 +348,7 @@ struct NotchView: View {
 
     private var currentStatusText: String {
         if model.connectionState == .reconnecting { return text("正在重连", "Retry") }
+        if model.isVoiceActive { return text("语音", "Voice") }
         guard model.activeTaskCount > 0 else { return text("空闲", "Idle") }
         if hasStaleActiveTask { return text("较久", "Quiet") }
         return switch currentActivePhase {
@@ -362,6 +363,7 @@ struct NotchView: View {
     private var currentStatusColor: Color {
         if model.connectionState == .disconnected || model.connectionState == .reconnecting { return .red }
         if model.connectionState == .reconnected { return .cyan }
+        if model.isVoiceActive { return .cyan }
         guard model.activeTaskCount > 0 else { return .white.opacity(0.3) }
         if hasStaleActiveTask { return .orange }
         return switch currentActivePhase {
@@ -530,7 +532,12 @@ struct NotchView: View {
                 Label(model.remainingUsageStatusText, systemImage: "gauge.with.dots.needle.50percent")
                     .foregroundStyle(expandedUsageColor)
                     .lineLimit(1)
-                Label(text("重置 \(model.resetCountdownText)", "Resets in \(model.resetCountdownText)"), systemImage: "clock")
+                Label(
+                    model.isUsageExhausted
+                        ? text("预计 \(model.predictedResetTimeText) 重置", "Expected reset \(model.predictedResetTimeText)")
+                        : text("重置 \(model.resetCountdownText)", "Resets in \(model.resetCountdownText)"),
+                    systemImage: "clock"
+                )
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                     .layoutPriority(2)
@@ -671,12 +678,6 @@ struct NotchView: View {
         }
         .padding(.horizontal, 14)
         .padding(.bottom, 12)
-        .overlay {
-            if model.shouldCelebrateDailyReport {
-                DailyReportCelebration()
-                    .allowsHitTesting(false)
-            }
-        }
     }
 
     private func reportWeekday(_ date: Date) -> String {
@@ -781,9 +782,17 @@ struct NotchView: View {
                 }
             } label: {
                 HStack(spacing: 9) {
-                    Circle()
-                        .fill(statusColor(task))
-                        .frame(width: 7, height: 7)
+                    if model.isVoiceActive {
+                        Image(systemName: "waveform")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.cyan)
+                            .symbolEffect(.variableColor.iterative, options: .repeating)
+                            .frame(width: 22, height: 20)
+                    } else {
+                        Circle()
+                            .fill(statusColor(task))
+                            .frame(width: 7, height: 7)
+                    }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(task.title)
                             .font(.system(size: 10.5, weight: .bold))
@@ -838,7 +847,12 @@ struct NotchView: View {
 
     @ViewBuilder
     private func taskRuntimeLine(_ task: CodexTaskItem) -> some View {
-        if let tool = task.toolActivity {
+        if task.isRealtimeActive {
+            Text(text("语音交互中", "Voice session active"))
+            .font(.system(size: 9, weight: .medium))
+            .foregroundStyle(.cyan.opacity(0.78))
+            .lineLimit(1)
+        } else if let tool = task.toolActivity {
             HStack(spacing: 4) {
                 Image(systemName: tool.systemImage)
                 Text(tool.label)
@@ -1186,7 +1200,7 @@ struct NotchView: View {
                         Button {
                             model.startNewConversationFromDrop(action)
                         } label: {
-                            VStack(spacing: 3) {
+                            HStack(spacing: 6) {
                                 Image(systemName: action.icon)
                                 Text(action.title)
                                     .lineLimit(1)
@@ -1298,41 +1312,6 @@ private struct DailyUsageHeatGrid: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "d"
         return formatter.string(from: date)
-    }
-}
-
-private struct DailyReportCelebration: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var expanded = false
-
-    var body: some View {
-        GeometryReader { proxy in
-            ZStack {
-                ForEach(0..<12, id: \.self) { index in
-                    let angle = Double(index) / 12 * Double.pi * 2
-                    let radius: CGFloat = expanded ? 72 + CGFloat(index % 3) * 10 : 8
-                    Image(systemName: index.isMultiple(of: 3) ? "sparkle" : "circle.fill")
-                        .font(.system(size: index.isMultiple(of: 3) ? 7 : 4, weight: .bold))
-                        .foregroundStyle([Color.cyan, .purple, .pink, .orange][index % 4])
-                        .position(x: proxy.size.width / 2, y: 42)
-                        .offset(
-                            x: cos(angle) * radius,
-                            y: sin(angle) * radius * 0.45
-                        )
-                        .opacity(expanded ? 0 : 0.9)
-                        .scaleEffect(expanded ? 0.4 : 1)
-                }
-            }
-        }
-        .onAppear {
-            guard !reduceMotion else {
-                expanded = true
-                return
-            }
-            withAnimation(.easeOut(duration: 0.85)) {
-                expanded = true
-            }
-        }
     }
 }
 
@@ -1593,6 +1572,15 @@ private struct NotchSettingsContent: View {
 
     private var featureSettings: some View {
         VStack(spacing: 8) {
+            settingRow(
+                icon: "waveform",
+                title: text("语音快捷键", "Voice Shortcut"),
+                detail: text("在 Codex 设置中配置全局 Voice 快捷键", "Configure the global Voice shortcut in Codex"),
+                value: text("跟随 Codex", "Managed by Codex")
+            ) {
+                model.openCodex()
+            }
+
             dailyReportSettingRow
 
             settingRow(

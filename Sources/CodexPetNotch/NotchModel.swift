@@ -49,6 +49,22 @@ private struct PendingCompletion {
     let eventDate: Date
 }
 
+private enum DemoScene: String {
+    case idle
+    case usage
+    case running
+    case completion
+    case drop
+
+    static var launchScene: DemoScene? {
+        let environment = ProcessInfo.processInfo.environment
+        if let value = environment["CODEXNOTCH_DEMO_SCENE"] {
+            return DemoScene(rawValue: value.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return environment["CODEXNOTCH_DEMO_FILE"] == nil ? nil : .idle
+    }
+}
+
 struct DropAction: Identifiable, Equatable {
     let id: String
     let title: String
@@ -112,6 +128,8 @@ final class NotchModel: ObservableObject {
     private var reconnectTask: Task<Void, Never>?
     private var dailyReportReminderTask: Task<Void, Never>?
     private var lowUsageReminderTask: Task<Void, Never>?
+    private var demoTimer: Timer?
+    private var lastDemoScene: DemoScene?
     private var wasCodexConnected: Bool?
     private let networkMonitor = NWPathMonitor()
     private var networkAvailable = true
@@ -135,6 +153,12 @@ final class NotchModel: ObservableObject {
         hasCheckedForUpdate = UserDefaults.standard.object(
             forKey: "\(Self.updateCachePrefix).lastCheckedAt"
         ) != nil
+        if let demoScene = DemoScene.launchScene {
+            startClock()
+            applyDemoScene(demoScene)
+            startDemoMonitor()
+            return
+        }
         startNetworkMonitor()
         startClock()
         startActivityMonitor()
@@ -148,7 +172,164 @@ final class NotchModel: ObservableObject {
         }
     }
 
+    private func startDemoMonitor() {
+        guard let path = ProcessInfo.processInfo.environment["CODEXNOTCH_DEMO_FILE"] else { return }
+        demoTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let value = try? String(contentsOfFile: path, encoding: .utf8),
+                  let scene = DemoScene(rawValue: value.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                return
+            }
+            Task { @MainActor [weak self] in
+                self?.applyDemoScene(scene)
+            }
+        }
+    }
+
+    private func applyDemoScene(_ scene: DemoScene) {
+        guard scene != lastDemoScene else { return }
+        lastDemoScene = scene
+
+        let now = Date()
+        let demoThreadID = ProcessInfo.processInfo.environment["CODEXNOTCH_DEMO_THREAD_ID"]
+            ?? "00000000-0000-0000-0000-000000000001"
+        let primaryTask = CodexTaskItem(
+            id: demoThreadID,
+            title: AppLanguage.text("整理产品发布页", "Polish the product launch page"),
+            detail: AppLanguage.text("正在检查界面与构建结果", "Checking the interface and build"),
+            project: "CodexNotch",
+            model: "gpt-5.6-sol",
+            effort: "low",
+            totalTokens: 128_400,
+            phase: .review,
+            startedAt: now.addingTimeInterval(-46),
+            lastActivityAt: now,
+            toolActivity: CodexToolActivity(
+                name: "computer-use",
+                label: AppLanguage.text("检查界面", "Inspecting interface"),
+                systemImage: "macwindow"
+            ),
+            subtasks: [],
+            queuedMessageCount: 0,
+            isRealtimeActive: false
+        )
+        let secondaryTask = CodexTaskItem(
+            id: "00000000-0000-0000-0000-000000000002",
+            title: AppLanguage.text("检查构建结果", "Check the release build"),
+            detail: AppLanguage.text("正在运行测试与签名检查", "Running tests and signing checks"),
+            project: "CodexNotch",
+            model: "gpt-5.6-terra",
+            effort: "medium",
+            totalTokens: 76_200,
+            phase: .running,
+            startedAt: now.addingTimeInterval(-19),
+            lastActivityAt: now,
+            toolActivity: CodexToolActivity(
+                name: "exec_command",
+                label: AppLanguage.text("运行工具", "Running tools"),
+                systemImage: "terminal"
+            ),
+            subtasks: [],
+            queuedMessageCount: 0,
+            isRealtimeActive: false
+        )
+        let completed = CodexTaskItem(
+            id: demoThreadID,
+            title: AppLanguage.text("生成产品说明", "Generate product notes"),
+            detail: AppLanguage.text("文档与构建检查已完成", "Docs and build checks are complete"),
+            project: "CodexNotch",
+            model: "gpt-5.6-sol",
+            effort: "low",
+            totalTokens: 128_400,
+            phase: .completed,
+            startedAt: now.addingTimeInterval(-68),
+            lastActivityAt: now,
+            toolActivity: nil,
+            subtasks: [],
+            queuedMessageCount: 0,
+            isRealtimeActive: false
+        )
+
+        todayTokens = 1_280_000
+        todayTokensByModel = ["gpt-5.6-sol": 960_000, "gpt-5.6-terra": 320_000]
+        usageLimit = CodexUsageLimit(
+            usedPercent: 32,
+            resetAt: now.addingTimeInterval(2 * 24 * 60 * 60 + 8 * 60 * 60),
+            planType: "Plus"
+        )
+        isHovered = false
+        isExpanded = false
+        isShowingSettings = false
+        isShowingTaskSearch = false
+        isShowingDailyReport = false
+        isDailyReportReminderVisible = false
+        isLowUsageReminderVisible = false
+        isTaskStatusPinned = false
+        isTaskDisplayCollapsed = false
+        isCompletionStackCollapsed = false
+        pendingDropPrompt = nil
+        pendingDropActions = []
+        pendingCompletions = []
+        completedTask = nil
+        completionMessage = nil
+        pendingCompletionCount = 0
+
+        switch scene {
+        case .idle:
+            state = .idle
+            activeTasks = []
+            activeTaskCount = 0
+        case .usage:
+            state = .idle
+            activeTasks = []
+            activeTaskCount = 0
+            isHovered = true
+        case .running:
+            state = .review
+            activeTasks = [primaryTask, secondaryTask]
+            activeTaskCount = 2
+        case .completion:
+            state = .review
+            activeTasks = [secondaryTask]
+            activeTaskCount = 1
+            pendingCompletions = [
+                PendingCompletion(
+                    key: "demo-completion",
+                    task: completed,
+                    message: AppLanguage.text("文档与构建检查已完成", "Docs and build checks are complete"),
+                    eventDate: now
+                )
+            ]
+            showNextCompletion()
+        case .drop:
+            state = .idle
+            activeTasks = []
+            activeTaskCount = 0
+            isExpanded = true
+            latestDrop = AppLanguage.text("产品截图.png", "product-screenshot.png")
+            pendingDropPrompt = AppLanguage.text(
+                "请分析这张产品截图，并整理成一份简洁的改进建议。",
+                "Analyze this product screenshot and suggest concise improvements."
+            )
+            pendingDropActions = [
+                DropAction(
+                    id: "new",
+                    title: AppLanguage.text("新建 Codex 对话", "New Codex conversation"),
+                    icon: "plus",
+                    prompt: pendingDropPrompt ?? ""
+                )
+            ]
+        }
+        statusAnimationStartedAt = now
+        NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
+    }
+
     func setHovered(_ hovered: Bool) {
+        if lastDemoScene == .usage {
+            guard !isHovered else { return }
+            isHovered = true
+            NotificationCenter.default.post(name: .notchSizeChanged, object: nil)
+            return
+        }
         if hovered && Date() < hoverSuppressedUntil { return }
         if !hovered && isDropTargeted { return }
         if isHovered == hovered {
@@ -361,14 +542,6 @@ final class NotchModel: ObservableObject {
         compactTokens(selectedDailyReportTokens)
     }
 
-    var shouldCelebrateDailyReport: Bool {
-        guard selectedDailyReportTokens > 0 else { return false }
-        if dailyUsageAverage > 0 {
-            return Double(selectedDailyReportTokens) / Double(dailyUsageAverage) >= 1.2
-        }
-        return selectedDailyReportTokens >= 75_000_000
-    }
-
     var selectedDailyReportDateText: String {
         if Calendar.current.isDateInToday(selectedDailyReportDate) {
             return AppLanguage.text("今天", "Today")
@@ -476,12 +649,16 @@ final class NotchModel: ObservableObject {
 
     private var remainingUsagePercent: Int? {
         guard let usageLimit else { return nil }
-        return max(0, Int(floor(100 - usageLimit.usedPercent)))
+        let remaining = max(0, 100 - usageLimit.usedPercent)
+        if remaining <= 1 { return 0 }
+        return Int(floor(remaining))
     }
 
     var usageProgress: Double {
         guard let usageLimit else { return 0 }
-        return max(0, min(1, (100 - usageLimit.usedPercent) / 100))
+        let remaining = max(0, 100 - usageLimit.usedPercent)
+        if remaining <= 1 { return 0 }
+        return min(1, remaining / 100)
     }
 
     var resetCountdownText: String {
@@ -494,6 +671,31 @@ final class NotchModel: ObservableObject {
         return hours > 0
             ? AppLanguage.text("\(hours)小时\(minutes)分", "\(hours)h \(minutes)m")
             : AppLanguage.text("\(minutes)分钟", "\(minutes)m")
+    }
+
+    var predictedResetTimeText: String {
+        guard let resetAt = usageLimit?.resetAt else {
+            return AppLanguage.text("等待重置信息", "Waiting for reset data")
+        }
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.locale = AppLanguage.current.usesEnglish
+            ? Locale(identifier: "en_US")
+            : Locale(identifier: "zh_CN")
+        formatter.dateFormat = "HH:mm"
+        let time = formatter.string(from: resetAt)
+        if calendar.isDateInToday(resetAt) {
+            return AppLanguage.text("今天 \(time)", "Today \(time)")
+        }
+        if calendar.isDateInTomorrow(resetAt) {
+            return AppLanguage.text("明天 \(time)", "Tomorrow \(time)")
+        }
+        formatter.dateFormat = AppLanguage.current.usesEnglish ? "EEE HH:mm" : "E HH:mm"
+        return formatter.string(from: resetAt)
+    }
+
+    var isUsageExhausted: Bool {
+        remainingUsagePercent == 0
     }
 
     var planText: String {
@@ -515,6 +717,10 @@ final class NotchModel: ObservableObject {
 
     var inputRequiredTask: CodexTaskItem? {
         activeTasks.first { $0.phase == .inputRequired }
+    }
+
+    var isVoiceActive: Bool {
+        activeTasks.contains { $0.isRealtimeActive }
     }
 
     var presentationMode: NotchPresentationMode {
